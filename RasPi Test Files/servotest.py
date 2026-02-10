@@ -216,6 +216,7 @@ while True:
 		if head_servo_test:
 			# Test Head Servos
 			# Set all to neutral position
+			#NOTE - Not perfectly 180 degrees
 			set_head_fb(90) #65-150
 			set_head_sts(90) #45-145
 			time.sleep(1)

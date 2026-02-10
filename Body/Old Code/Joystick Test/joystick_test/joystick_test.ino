@@ -3,7 +3,7 @@
 // This code is free, baby. Use it however you like.
 
 // This sketch shows the basic operation of the Thumb Joystick (COM-09032) and breakout board (BOB-09110).
-// The jo ystick outputs two analog voltages (VERT and HORIZ), and one digital signal (SEL) for the pushbutton.
+// The joystick outputs two analog voltages (VERT and HORIZ), and one digital signal (SEL) for the pushbutton.
 
 // Connections to joystick (change if you use different pins):
 
