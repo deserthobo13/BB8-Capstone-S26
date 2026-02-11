@@ -4,6 +4,8 @@ import busio
 import board
 import pygame
 from PID import PID
+from IMU import get_stabilization_data as get_pitch_angle
+import adafruit_bno055
 
 # Adafruit & GPIOZero imports
 from adafruit_pca9685 import PCA9685
@@ -12,8 +14,13 @@ from gpiozero import PWMOutputDevice, OutputDevice
 
 # 1. INITIALIZE HARDWARE
 i2c = busio.I2C(board.SCL, board.SDA)
+imu = adafruit_bno055.BNO055_I2C(i2c)
 pca = PCA9685(i2c)
 pca.frequency = 50 
+
+# PID Feedback Control Config
+stability_pid = PID(Kp=0.02, Ki=0.001, Kd=0.01)
+TARGET_ANGLE = 0.0  # Desired angle for stabilization (e.g., 0 degrees)
 
 # 2. INITIALIZE PYGAME FOR CONTROLLER
 pygame.init()
@@ -103,22 +110,48 @@ try:
                 set_head_sts(90)
                 print("Resetting Positions...")
 
-            # --- B. LEFT STICK: DRIVE (Y) & SWING (X) ---
-            ly_axis = -joystick.get_axis(1) # Drive Y
-            lx_axis = joystick.get_axis(0)  # Swing X
+            # --- B. LEFT STICK: STABILITY DRIVE (Y) & SWING (X) ---
+            ly_axis = -joystick.get_axis(1) # Forward/Back Input (-1.0 to 1.0)
+            lx_axis = joystick.get_axis(0)  # Swing Input
             
-            # Drive Logic
-            if abs(ly_axis) > 0.1:
-                DC_motor1.value = 0.5 + (ly_axis * 0.15)
-                DC_motor2.value = 0.5 + (ly_axis * 0.15)
-            else:
-                DC_motor1.value = 0.5
-                DC_motor2.value = 0.5
+            # 1. READ SENSOR
+            current_pitch = get_pitch_angle()
+            
+            # 2. CALCULATE TARGET ANGLE (The "Setpoint")
+            # If stick is neutral, target is 0 (Vertical).
+            # If stick is full forward, target is +10 degrees (Lean Forward).
+            MAX_LEAN_ANGLE = 10.0 
+            target_pitch = ly_axis * MAX_LEAN_ANGLE
 
-            # Swing Logic with Auto-Center
+            # 3. SAFETY CUTOFF (Prevent runaway if tipped over)
+            if abs(current_pitch) > 45:
+                print("TIPPED OVER! MOTORS DISABLED")
+                pid_output = 0
+                stability_pid.integral = 0 # Reset accumulated error
+            else:
+                # 4. COMPUTE PID OUTPUT
+                # Returns value roughly between -1.0 and 1.0
+                pid_output = stability_pid.compute(target_pitch, current_pitch)
+
+            # 5. MAP OUTPUT TO MOTORS
+            # Your motors use 0.5 as Stop, 1.0 Forward, 0.0 Reverse
+            # We add the PID output to the 0.5 center point.
+            
+            # Invert this sign if motors spin the wrong way!
+            motor_command = 0.5 + (pid_output * 0.5) 
+            
+            # Clamp value between 0.0 and 1.0 to verify safety
+            motor_command = max(0.0, min(1.0, motor_command))
+
+            # Apply to Motors
+            DC_motor1.value = motor_command
+            DC_motor2.value = motor_command
+
+            # --- SWING LOGIC (Keep Manual for now) ---
             if abs(lx_axis) > 0.1:
                 current_swing += (lx_axis * 2.5)
             else:
+                # Auto-center swing slowly
                 if current_swing > 91:
                     current_swing -= 1.5
                 elif current_swing < 89:
