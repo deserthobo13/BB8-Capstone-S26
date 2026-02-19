@@ -1,7 +1,7 @@
 import socket
 import time
 
-MOTOR_PI_IP = "IP Address" # Change to Body IP Address
+MOTOR_PI_IP = "bb8pi.local" # Change to Body IP Address
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
