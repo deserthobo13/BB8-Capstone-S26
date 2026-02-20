@@ -1,13 +1,19 @@
 import time
 
-class PID:
+class PIDController:
     def __init__(self, kp, ki, kd):
         self.kp = kp
         self.ki = ki
         self.kd = kd
         
-        self.prev_error = 0
-        self.integral = 0
+        self.prev_error = 0.0
+        self.integral = 0.0
+        self.last_time = time.time()
+        
+    def reset(self):
+        """Call this right before starting the balance loop to prevent massive dt spikes"""
+        self.prev_error = 0.0
+        self.integral = 0.0
         self.last_time = time.time()
         
     def compute(self, setpoint, measured_value):
@@ -16,7 +22,7 @@ class PID:
         
         # Prevent divide by zero errors if loop runs too fast
         if dt <= 0:
-            return 0 
+            return 0.0 
 
         # 1. Calculate Error
         error = setpoint - measured_value
@@ -25,9 +31,9 @@ class PID:
         P = self.kp * error
         
         # 3. Integral (with Anti-Windup)
-        # We clamp the integral so it doesn't build up infinitely if the robot is stuck
+        # Clamped so it doesn't build up infinitely if the robot is stuck
         self.integral += error * dt
-        self.integral = max(min(self.integral, 10), -10) 
+        self.integral = max(min(self.integral, 10.0), -10.0) 
         I = self.ki * self.integral
         
         # 4. Derivative

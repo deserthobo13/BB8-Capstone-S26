@@ -2,31 +2,38 @@ import time
 import board
 import adafruit_bno055
 
-i2c = board.I2C()  
-sensor = adafruit_bno055.BNO055_I2C(i2c)
+class IMUSensor:
+    def __init__(self):
+        print("Initializing BNO055 IMU...")
+        self.i2c = board.I2C()  
+        self.sensor = adafruit_bno055.BNO055_I2C(self.i2c)
+        time.sleep(1) # Give sensor a moment to boot
 
-def get_stabilization_data():
-    try:
-        angles = sensor.euler
-        if angles is None:
+    def get_pitch(self):
+        """
+        Main function call for the balance loop used by the PID controller.
+        Returns the pitch angle. Adjust the index [2] if sensor is mounted differently.
+        """
+        try:
+            angles = self.sensor.euler
+            if angles is None or angles[2] is None:
+                return 0.0
+            return angles[2]
+        except OSError:
+            # BNO055 sometimes throws I2C stretch errors. Just return 0.0 safely.
             return 0.0
-        return angles[2]
-    except OSError:
-        return 0.0
 
-while True:
-    # Useless info that only slows down the sampling rate:
-    #print("Temperature: {} degrees C".format(temperature()))
-    #print(f"Accelerometer (m/s^2): {sensor.acceleration}")
-    #print(f"Magnetometer (microteslas): {sensor.magnetic}")
-    #print(f"Gyroscope (rad/sec): {sensor.gyro}")
-    #print(f"Linear acceleration (m/s^2): {sensor.linear_acceleration}")
-    #print(f"Gravity (m/s^2): {sensor.gravity}")
-    #print()
-    
-    #Important info for PID loop; Use quaternion if euler becomes erratic.
-    print(f"Euler angle: {sensor.euler}")
-    #print(f"Quaternion: {sensor.quaternion}")
-
-    # Delete this sleep function before testing PID loop.
-    time.sleep(1)
+# --- TESTING BLOCK ---
+# This ONLY runs if you type `python IMU.py` in the terminal.
+# It is completely ignored when imported by BB8_Movement.py
+if __name__ == "__main__":
+    imu = IMUSensor()
+    print("Starting IMU Test...")
+    while True:
+        try:
+            print(f"Euler angle: {imu.sensor.euler}")
+            print(f"Pitch (Stabilization): {imu.get_pitch()}")
+        except Exception as e:
+            print(f"Error reading sensor: {e}")
+        
+        time.sleep(0.1) # Faster test loop
