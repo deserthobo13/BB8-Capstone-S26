@@ -53,5 +53,6 @@ try:
 except KeyboardInterrupt:
     print("Shutting down Body Pi...")
 finally:
-    bb8.disable_system() # Ensure we turn off motors and relays on exit
+    bb8.rest_all_servos() # Return all servos to neutral position
+    bb8.stop_all() # Ensure we turn off motors and relays on exit
     sock.close() # Clean up the socket connection
