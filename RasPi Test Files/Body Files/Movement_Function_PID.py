@@ -78,7 +78,6 @@ class BB8Movement:
         motor_power = self.balance_pid.compute(self.target_pitch, current_pitch)
 
         # 3. Apply limits and output to motors (0.5 is stop)
-        # Note: You may need to invert motor_power (change + to -) depending on motor wiring polarity
         pwm_val = 0.5 + motor_power
         pwm_val = max(0.0, min(1.0, pwm_val)) # Strictly clamp between 0 and 1
         
