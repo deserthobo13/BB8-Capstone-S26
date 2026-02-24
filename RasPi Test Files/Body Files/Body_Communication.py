@@ -1,5 +1,6 @@
 import socket
 import time
+import os
 from Movement_Functions import BB8Movement
 
 # Initialize the BB-8 Movement class & Functions
@@ -55,4 +56,6 @@ except KeyboardInterrupt:
 finally:
     bb8.rest_all_servos() # Return all servos to neutral position
     bb8.stop_all() # Ensure we turn off motors and relays on exit
+    time.sleep(0.5) #Sleep to ensure the GPIO pins revert to 0
     sock.close() # Clean up the socket connection
+    os.system("pinctrl set 13,18,19 op dl")
