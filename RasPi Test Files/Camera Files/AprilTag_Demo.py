@@ -43,18 +43,19 @@ config = picam2.create_preview_configuration(main={"size": (640, 480)})
 picam2.configure(config)
 picam2.start()
 
-print(f"--- BB-8: VISION TO UDP BRIDGE ACTIVE ---")
+print(f"--- BB-8: HEADLESS VISION TO UDP BRIDGE ACTIVE ---")
 print(f"--- TARGET DISTANCE: {TARGET_DISTANCE} inches ---")
+print("Press Ctrl+C in the terminal to stop.")
 
 try:
     while True:
+        # Capture the array and convert straight to Grayscale for efficiency
         frame = picam2.capture_array()
-        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        
         results = at_detector.detect(gray, estimate_tag_pose=True, camera_params=[600, 600, 320, 240], tag_size=165.1)
         my_tag = next((t for t in results if t.tag_id == 0), None)
         
-        status = "SEARCHING AREA..." 
         desired_command = "STOP" # Default state is stop
 
         if my_tag:
@@ -83,17 +84,8 @@ try:
                    (move_dir == 'forward' and z_inch <= STOP_FORWARD):
                     desired_command = "STOP"
                     is_moving = False
-                    
-                status = f"MOVING {move_dir.upper()} ({z_inch:.1f} in)"
             else:
                 desired_command = "STOP"
-                status = f"LOCKED ({z_inch:.1f} in)"
-
-            # Draw a box around the tag for visual debugging
-            ptA, ptB, ptC, ptD = my_tag.corners
-            ptA = (int(ptA[0]), int(ptA[1]))
-            ptC = (int(ptC[0]), int(ptC[1]))
-            cv2.rectangle(frame_bgr, ptA, ptC, (0, 255, 0), 2)
 
         else:
             # --- TAG MISSING ---
@@ -101,33 +93,28 @@ try:
             time_since_last_seen = time.time() - last_seen_time
             
             if missing_frame_count < MISSING_FRAME_LIMIT and is_tracking:
-                status = "FILTERING..."
                 # Keep sending whatever we were doing during brief flickers
                 desired_command = last_sent_command 
             elif time_since_last_seen < LOST_TIMEOUT:
                 is_moving = False
                 desired_command = "STOP"
-                status = "WAITING..."
             else:
                 is_tracking = False
                 is_moving = False
                 desired_command = "STOP"
-                status = "SEARCHING AREA..."
 
         # --- SMART UDP SENDER ---
         # Only send a packet if the command state has actually changed.
-        # This prevents flooding the Body Pi with 30 "FORWARD" messages a second.
         if desired_command != last_sent_command:
             send_command(desired_command)
             last_sent_command = desired_command
 
-        # Display Status
-        cv2.putText(frame_bgr, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        cv2.imshow("BB-8 Vision", frame_bgr)
-        if cv2.waitKey(1) & 0xFF == ord('q'): break
+except KeyboardInterrupt:
+    print("\nCtrl+C detected. Exiting script...")
 
 finally:
-    print("\nShutting down Vision node...")
+    print("Shutting down Vision node...")
     send_command("STOP") # Send a final safety stop to the body
     picam2.stop()
     sock.close()
+    print("Head Pi safely shut down.")
