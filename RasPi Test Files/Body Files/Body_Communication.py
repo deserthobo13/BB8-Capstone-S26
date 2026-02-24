@@ -47,12 +47,14 @@ try:
             bb8.spin_head(-0.5)
         elif current_command == "SPIN_HEAD_RIGHT":
             bb8.spin_head(0.5)
-
-        bb8.update_balance() # Always run the balance update in the main loop
     
         time.sleep(0.01) # Small sleep to prevent maxing out the CPU (100Hz loop)
 except KeyboardInterrupt:
+    bb8.rest_all_servos() # Return all servos to neutral position
+    bb8.stop_all() # Ensure we turn off motors and relays on exit
+    sock.close() # Clean up the socket connection
     print("Shutting down Body Pi...")
+    time.sleep(1)
 finally:
     bb8.rest_all_servos() # Return all servos to neutral position
     bb8.stop_all() # Ensure we turn off motors and relays on exit
