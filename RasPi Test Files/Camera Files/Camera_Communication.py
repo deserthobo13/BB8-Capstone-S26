@@ -11,3 +11,8 @@ def send_command(cmd):
 # Placeholder for your AI logic
 # If distance > 100cm: send_command("FORWARD")
 # If distance < 20cm: send_command("BACKWARD")
+while True:
+    print("What command would you like to send?")
+    user_input = input().strip().lower()
+    send_command(user_input)
+    
