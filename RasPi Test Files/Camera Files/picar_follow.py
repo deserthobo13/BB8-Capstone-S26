@@ -11,11 +11,14 @@ px = Picarx()
 CRAWL_SPEED = 15       # Your new preferred speed
 SEARCH_SPEED = 25      # Speed for the search rotation
 
-# Distance Zones
-START_MOVE_MIN = 47.0  
-START_MOVE_MAX = 57.0  
-STOP_FORWARD = 52.0    
-STOP_BACKWARD = 55.0   
+# THE MASTER DISTANCE CONTROL (in inches)
+TARGET_DISTANCE = 70.0 # Change this ONE number to test how far it can go
+# NOTE 250 inches seems to be the max distance it can read with a 165.1 mm april tag (200 is still iffy)
+# Distance Zones (These automatically adjust based on TARGET_DISTANCE)
+START_MOVE_MIN = TARGET_DISTANCE - 5.0  
+START_MOVE_MAX = TARGET_DISTANCE + 5.0  
+STOP_FORWARD = TARGET_DISTANCE    
+STOP_BACKWARD = TARGET_DISTANCE + 3.0   
 
 # Stability Thresholds (The Jitter Fixers)
 PIXEL_DEADZONE = 20    # Ignore tag movements smaller than this (pixels)
@@ -47,6 +50,7 @@ def update_servos(pan):
     return pan
 
 print(f"--- BB-8: SEARCH RESTORED (Speed 15) ---")
+print(f"--- TARGET DISTANCE: {TARGET_DISTANCE} inches ---")
 
 try:
     while True:
@@ -55,6 +59,8 @@ try:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         results = at_detector.detect(gray, estimate_tag_pose=True, camera_params=[600, 600, 320, 240], tag_size=165.1)
         my_tag = next((t for t in results if t.tag_id == 0), None)
+        
+        status = "SEARCHING AREA..." # Default status
 
         if my_tag:
             # --- LOCK ACQUIRED ---
@@ -82,7 +88,8 @@ try:
                     move_dir = 'forward'
                 elif abs(current_pan) > FACING_THRESHOLD:
                     is_moving = True
-                    move_dir = 'backward' if z_inch < 52 else 'forward'
+                    # Fixed hardcoded 52 to use TARGET_DISTANCE
+                    move_dir = 'backward' if z_inch < TARGET_DISTANCE else 'forward' 
             
             if is_moving:
                 if move_dir == 'backward':
@@ -97,10 +104,18 @@ try:
                     px.forward(0)
                     is_moving = False
                     time.sleep(SETTLE_TIME)
+                    
+                status = f"MOVING {move_dir.upper()} ({z_inch:.1f} in)"
             else:
                 px.forward(0)
                 px.set_dir_servo_angle(0)
-                status = "LOCKED"
+                status = f"LOCKED ({z_inch:.1f} in)"
+
+            # Draw a box around the tag for visual debugging
+            ptA, ptB, ptC, ptD = my_tag.corners
+            ptA = (int(ptA[0]), int(ptA[1]))
+            ptC = (int(ptC[0]), int(ptC[1]))
+            cv2.rectangle(frame_bgr, ptA, ptC, (0, 255, 0), 2)
 
         else:
             # --- TAG MISSING ---
@@ -126,12 +141,9 @@ try:
                 current_pan = 40 * np.sin(t * 1.5)
                 update_servos(current_pan)
                 
-                # Optional: Make the car body rotate slightly during search
-                # px.set_dir_servo_angle(30 if current_pan > 0 else -30)
-                # px.forward(SEARCH_SPEED)
-                
                 status = "SEARCHING AREA..."
 
+        # Display Status
         cv2.putText(frame_bgr, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         cv2.imshow("BB-8", frame_bgr)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
