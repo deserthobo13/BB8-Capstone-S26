@@ -1,6 +1,6 @@
 import socket
 import time
-from BB8_Movement import BB8Movement
+from Movement_Functions import BB8Movement
 
 # Initialize the BB-8 Movement class & Functions
 bb8 = BB8Movement()
