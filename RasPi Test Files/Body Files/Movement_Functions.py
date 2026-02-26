@@ -4,6 +4,7 @@ import board
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 from gpiozero import PWMOutputDevice, OutputDevice
+from gpiozero import PhaseEnableMotor as Motor
 #from PID import PID
 #from IMU import get_stabilization_data
 
@@ -18,14 +19,17 @@ class BB8Movement:
         self.pca.frequency = 50 
 
         # 2. DEFINE MOTORS (Main Drive & Turn)
-        # Note: 0.5 is STOP for these PWM motor controllers
+        # Phase = Direction pin, enable = PWM speed pin
+        '''
+        The below code was used for the anti phase mode instead of the signed magnitude.
         self.DC_motor1 = PWMOutputDevice(13, initial_value=0.5, frequency=10000)
         self.DC_motor2 = PWMOutputDevice(18, initial_value=0.5, frequency=10000)
         self.Turn_motor = PWMOutputDevice(19, initial_value=0.5, frequency=10000)
+        '''
+        self.DC_motor1 = Motor(phase=5, enable=13, pwm=True)
+        self.DC_motor2 = Motor(phase=6, enable=18, pwm=True)
+        self.Turn_motor = Motor(phase=26, enable=19, pwm=True)
         
-        self.motor_driver_relay = OutputDevice(17, active_high=False)
-        self.turn_driver_relay = OutputDevice(27, active_high=False)
-
         # 3. DEFINE SERVOS
         self.swing_servo = servo.Servo(self.pca.channels[0])
         self.head_fb = servo.Servo(self.pca.channels[2])       # Forward/Backward
@@ -40,15 +44,12 @@ class BB8Movement:
 
     # --- POWER MANAGEMENT ---
     def enable_system(self):
-        """Turns on the motor driver relays"""
-        self.motor_driver_relay.on()
-        self.turn_driver_relay.on()
-
+        """No relays, so this will soon be removed"""
+        pass
+    
     def disable_system(self):
-        """Turns off relays and safely stops all movement"""
+        """No relays, so this will also soon be removed."""
         self.stop_all()
-        self.motor_driver_relay.off()
-        self.turn_driver_relay.off()
         self.rest_all_servos()
 
     # --- MAIN DRIVE & STEERING ---
@@ -56,25 +57,31 @@ class BB8Movement:
         """
         Drive the main motors. 
         speed: -1.0 (Full Reverse) to 1.0 (Full Forward). 0.0 is Stop.
-        """
         # Clamping input and applying the 0.15 scale factor from your original code
         speed_val = max(-1.0, min(1.0, speed)) 
         pwm_val = 0.5 + (speed_val * 0.15)
         
         self.DC_motor1.value = pwm_val
-        self.DC_motor2.value = pwm_val
+        self.DC_motor2.value = pwm_val        
+        """
+        max_speed_factor = 0.30
+        speed_val = max(-1.0, min(1.0, speed)) * max_speed_factor
+        
+        self.DC_motor1.value = speed_val
+        self.DC_motor2.value = speed_val
 
     def steer(self, direction):
         """
         Steer the internal pendulum.
         direction: -1 (Left), 1 (Right), 0 (Center)
-        """
         if direction < -0.5:
             self.Turn_motor.value = 0 # Turn Left
         elif direction > 0.5:
             self.Turn_motor.value = 1 # Turn Right
         else:
             self.Turn_motor.value = 0.5 # Center
+        """
+        self.Turn_motor.value = direction
 
     # --- SWING & BALANCE ---
     def set_swing(self, degrees):
@@ -105,9 +112,9 @@ class BB8Movement:
     # --- UTILITY & SAFETY ---
     def stop_all(self):
         """Instantly stops all motors and centers servos"""
-        self.DC_motor1.value = 0.5
-        self.DC_motor2.value = 0.5
-        self.Turn_motor.value = 0.5
+        self.DC_motor1.value = 0
+        self.DC_motor2.value = 0
+        self.Turn_motor.value = 0
         self.head_rotate.throttle = 0
         self.set_swing(90)
         self.set_head_fb(90)
