@@ -1,22 +1,33 @@
-import socket
+import os
 import time
 
-# Set up the UDP socket
-UDP_IP = "0.0.0.0" # Listens on all available network interfaces
-UDP_PORT = 5005
+# --- 1. HARDWARE PWM FIX ---
+os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
 
+# --- 2. IMPORT MOTOR LIBRARIES ---
+import socket
+from Movement_Functions import BB8Movement
+
+# Initialize the BB-8 Movement class & Functions
+bb8 = BB8Movement()
+bb8.enable_system() 
+
+# Set up the UDP socket
+UDP_IP = "0.0.0.0" 
+UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
-sock.setblocking(False) # Prevents the script from freezing while waiting for data
+sock.setblocking(False) 
 
-print(f"Test Receiver: Listening for Head Pi on port {UDP_PORT}...")
-print("Press Ctrl+C to stop.")
+print(f"Motor Pi: Listening for Head Pi on port {UDP_PORT}...")
 
 last_command_time = time.time()
 TIMEOUT_SECONDS = 0.5
-current_command = "NONE"
 
-# --- Variables for calculating instruction rate ---
+current_command = "STOP"
+previous_command = "NONE" # Track the last executed command
+
+# Variables for calculating instruction rate
 packet_count = 0
 rate_timer = time.time()
 
@@ -25,43 +36,60 @@ try:
         current_time = time.time()
         
         try:
-            # Try to receive data
             data, addr = sock.recvfrom(1024)
             new_command = data.decode('utf-8')
             
-            # Increment the packet counter for every single received message
             packet_count += 1
             
-            # If the command changed, print it and the sender's IP
+            # Network update
             if new_command != current_command:
-                print(f"[{time.strftime('%H:%M:%S')}] Received: '{new_command}' from {addr[0]}")
                 current_command = new_command
             
-            last_command_time = current_time # Reset the safety timer
+            last_command_time = current_time # Pet the watchdog timer
             
         except BlockingIOError:
-            # No data received in this specific loop cycle
             pass
 
-        # --- Rate Printing Logic (Triggers once per second) ---
+        # --- Rate Printing Logic ---
         if current_time - rate_timer >= 1.0:
-            # Only print the rate if we are actively connected
-            if current_command != "TIMEOUT":
+            if current_command != "STOP" or packet_count > 0:
                 print(f"--- Data Rate: {packet_count} packets/sec ---")
-            
-            # Reset counter and timer for the next second
             packet_count = 0
             rate_timer = current_time
 
-        # Connection Timeout Check
+        # --- SAFETY WATCHDOG TIMEOUT ---
         if current_time - last_command_time > TIMEOUT_SECONDS:
-            if current_command != "TIMEOUT":
-                print("--- CONNECTION LOST (No data for 0.5s) ---")
-                current_command = "TIMEOUT"
+            if current_command != "STOP":
+                print("--- CONNECTION LOST! EXECUTING EMERGENCY STOP ---")
+                current_command = "STOP"
+        
+        # --- MOTOR EXECUTION LOGIC (STATE MACHINE) ---
+        # Only update the hardware if the command has ACTUALLY changed
+        if current_command != previous_command:
+            print(f"[{time.strftime('%H:%M:%S')}] Executing Hardware State: '{current_command}'")
+            
+            if current_command == "FORWARD":
+                bb8.drive(0.5)
+            elif current_command == "BACKWARD":
+                bb8.drive(-0.5)
+            elif current_command == "STOP":
+                bb8.stop_all()
+            elif current_command == "SPIN_HEAD_LEFT":
+                bb8.spin_head(-0.5)
+            elif current_command == "SPIN_HEAD_RIGHT":
+                bb8.spin_head(0.5)
+            
+            # Update the tracker so it doesn't execute again until necessary
+            previous_command = current_command
         
         time.sleep(0.01) # 100Hz loop frequency
 
 except KeyboardInterrupt:
-    print("\nShutting down Test Receiver...")
+    print("\nCtrl+C detected. Shutting down Body Pi...")
 finally:
-    sock.close()
+    print("Cleaning up hardware states...")
+    bb8.rest_all_servos() 
+    bb8.stop_all() 
+    time.sleep(0.5) 
+    sock.close() 
+    print("Shutdown complete.")
