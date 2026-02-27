@@ -1,7 +1,7 @@
 import os
 import time
 
-# --- 1. HARDWARE PWM FIX ---
+# --- 1. HARDWARE PWM FIX (Execute before importing motor libraries) ---
 os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
 
 # --- 2. IMPORT MOTOR LIBRARIES ---
@@ -10,7 +10,7 @@ from Movement_Functions import BB8Movement
 
 # Initialize the BB-8 Movement class & Functions
 bb8 = BB8Movement()
-bb8.enable_system() 
+bb8.enable_system() # Power on the motors and relays
 
 # Set up the UDP socket
 UDP_IP = "0.0.0.0" 
@@ -23,9 +23,7 @@ print(f"Motor Pi: Listening for Head Pi on port {UDP_PORT}...")
 
 last_command_time = time.time()
 TIMEOUT_SECONDS = 0.5
-
 current_command = "STOP"
-previous_command = "NONE" # Track the last executed command
 
 # Variables for calculating instruction rate
 packet_count = 0
@@ -41,8 +39,8 @@ try:
             
             packet_count += 1
             
-            # Network update
             if new_command != current_command:
+                print(f"[{time.strftime('%H:%M:%S')}] Executing: '{new_command}'")
                 current_command = new_command
             
             last_command_time = current_time # Pet the watchdog timer
@@ -63,24 +61,17 @@ try:
                 print("--- CONNECTION LOST! EXECUTING EMERGENCY STOP ---")
                 current_command = "STOP"
         
-        # --- MOTOR EXECUTION LOGIC (STATE MACHINE) ---
-        # Only update the hardware if the command has ACTUALLY changed
-        if current_command != previous_command:
-            print(f"[{time.strftime('%H:%M:%S')}] Executing Hardware State: '{current_command}'")
-            
-            if current_command == "FORWARD":
-                bb8.drive(0.5)
-            elif current_command == "BACKWARD":
-                bb8.drive(-0.5)
-            elif current_command == "STOP":
-                bb8.stop_all()
-            elif current_command == "SPIN_HEAD_LEFT":
-                bb8.spin_head(-0.5)
-            elif current_command == "SPIN_HEAD_RIGHT":
-                bb8.spin_head(0.5)
-            
-            # Update the tracker so it doesn't execute again until necessary
-            previous_command = current_command
+        # --- MOTOR EXECUTION LOGIC ---
+        if current_command == "FORWARD":
+            bb8.drive(0.5)
+        elif current_command == "BACKWARD":
+            bb8.drive(-0.5)
+        elif current_command == "STOP":
+            bb8.stop_all()
+        elif current_command == "SPIN_HEAD_LEFT":
+            bb8.spin_head(-0.5)
+        elif current_command == "SPIN_HEAD_RIGHT":
+            bb8.spin_head(0.5)
         
         time.sleep(0.01) # 100Hz loop frequency
 
