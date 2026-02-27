@@ -1,9 +1,11 @@
 import time
+import os
 import busio
+os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
+from gpiozero import PWMOutputDevice, OutputDevice
 import board
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
-from gpiozero import PWMOutputDevice, OutputDevice
 from gpiozero import PhaseEnableMotor as Motor
 #from PID import PID
 #from IMU import get_stabilization_data
@@ -46,7 +48,6 @@ class BB8Movement:
     def enable_system(self):
         """No relays, so this will soon be removed"""
         pass
-    
     def disable_system(self):
         """No relays, so this will also soon be removed."""
         self.stop_all()
