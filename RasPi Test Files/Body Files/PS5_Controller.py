@@ -179,8 +179,6 @@ finally:
     DC_motor2.value = 0
     Turn_motor.value = 0
     head_rotate.throttle = 0
-    motor_driver_relay.off()
-    turn_driver_relay.off()
     rest_all_servos()
     pygame.quit()
     sys.exit()
