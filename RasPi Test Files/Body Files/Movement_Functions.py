@@ -7,8 +7,8 @@ import board
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 from gpiozero import PhaseEnableMotor as Motor
-#from PID import PID
-#from IMU import get_stabilization_data
+from PID import PIDController
+from IMU import IMUSensor
 
 
 class BB8Movement:
@@ -84,13 +84,28 @@ class BB8Movement:
         """
         self.Turn_motor.value = direction
 
-    # --- SWING & BALANCE ---
     def set_swing(self, degrees):
         """Sets internal pendulum swing. Safe range 70 to 117"""
         self.current_swing = max(70, min(117, degrees))
         difference = self.current_swing - 90
         self.swing_servo.angle = 90 + difference
         self.swing_servo2.angle = 90 - difference
+
+    def update_balance(self):
+        """
+        THE CORE PID LOOP. Must be called as fast as possible in the main script.
+        """
+        # 1. Get current lean angle from the IMU
+        current_pitch = self.imu.get_pitch()
+
+        # 2. Compute the PID correction
+        pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
+
+        # 3. Apply the hardware mapping (90 - correction)
+        target_servo_degrees = 90 - pid_correction
+        
+        # 4. Command the servos (set_swing handles the min/max clamping internally)
+        self.set_swing(target_servo_degrees)
 
     # --- HEAD CONTROLS ---
     def set_head_fb(self, degrees):

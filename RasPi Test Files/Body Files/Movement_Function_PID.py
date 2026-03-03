@@ -67,22 +67,28 @@ class BB8Movement:
         MAX_LEAN_ANGLE = 15.0 # Max degrees the chassis is allowed to lean
         self.target_pitch = speed * MAX_LEAN_ANGLE
 
+    def set_swing(self, degrees):
+        """Sets internal pendulum swing. Safe range 70 to 117"""
+        self.current_swing = max(70, min(117, degrees))
+        difference = self.current_swing - 90
+        self.swing_servo.angle = 90 + difference
+        self.swing_servo2.angle = 90 - difference
+
     def update_balance(self):
         """
         THE CORE PID LOOP. Must be called as fast as possible in the main script.
         """
-        # 1. Get current lean angle
+        # 1. Get current lean angle from the IMU
         current_pitch = self.imu.get_pitch()
 
-        # 2. Compute motor adjustment needed to reach target_pitch
-        motor_power = self.balance_pid.compute(self.target_pitch, current_pitch)
+        # 2. Compute the PID correction
+        pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
 
-        # 3. Apply limits and output to motors (0.5 is stop)
-        pwm_val = 0.5 + motor_power
-        pwm_val = max(0.0, min(1.0, pwm_val)) # Strictly clamp between 0 and 1
+        # 3. Apply the hardware mapping (90 - correction)
+        target_servo_degrees = 90 - pid_correction
         
-        self.DC_motor1.value = pwm_val
-        self.DC_motor2.value = pwm_val
+        # 4. Command the servos (set_swing handles the min/max clamping internally)
+        self.set_swing(target_servo_degrees)
 
     # --- STEERING & HEAD (Direct Control) ---
     # (These remain the same as before because they don't dictate forward/backward balance)
