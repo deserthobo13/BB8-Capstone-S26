@@ -1,39 +1,51 @@
 import time
-from IMU import IMUSensor
-from PID import PIDController
+from Movement_Functions import BB8Movement
 
-def run_pendulum_pid_test():
-    print("--- Starting Pendulum PID Test ---")
-    imu = IMUSensor()
+def run_balance_test():
+    print("--- Starting BB-8 Real Hardware Balance Test ---")
+    print("WARNING: Make sure BB-8 is safely secured on the motion stand!")
+    print("The pendulum may swing rapidly during tuning.\n")
     
-    # Kp=1.0 means 1 degree of fall = 1 degree of servo swing. 
-    # You will likely need to increase this later!
-    pid = PIDController(kp=1.0, ki=0.0, kd=0.1) 
-    target_pitch = 0.0 # Balance upright
+    # 1. Initialize the movement class (This also initializes IMU, PID, I2C, etc.)
+    bb8 = BB8Movement()
     
-    print("\nStarting loop in 3 seconds...")
+    print("\nInitialization complete. Starting balance loop in 3 seconds...")
     time.sleep(3)
-    pid.reset()
+    
+    # 2. Reset the PID right before starting to clear any startup time delays
+    bb8.balance_pid.reset()
+    
+    print("Balance loop running! Press Ctrl+C to stop.")
     
     try:
         while True:
-            current_pitch = imu.get_pitch()
+            # Continuously update the PID math and command the servos
+            bb8.update_balance()
             
-            # 1. Calculate the correction
-            pid_correction = pid.compute(target_pitch, current_pitch)
+            # (Optional) Uncomment the lines below to see live data in your terminal.
+            # Warning: Printing to the terminal slows down the loop slightly!
+            # current_pitch = bb8.imu.get_pitch()
+            # current_swing = bb8.current_swing
+            # print(f"Pitch: {current_pitch:>6.2f}° | Swing Servo: {current_swing:>6.2f}°", end='\r')
             
-            # 2. SUBTRACT correction based on your hardware test!
-            servo_degrees = 90 - pid_correction
-            
-            # 3. Clamp the values to your safe physical limits
-            clamped_degrees = max(70, min(117, servo_degrees))
-            
-            print(f"Pitch: {current_pitch:>6.2f}° | PID: {pid_correction:>6.2f} | Command to set_swing: {clamped_degrees:>6.2f}°")
-            
-            time.sleep(0.1)
+            # Run the loop rapidly. 0.02 seconds = 50Hz update rate. 
+            # You want this to run fast so the D (Derivative) term works smoothly.
+            time.sleep(0.02)
             
     except KeyboardInterrupt:
-        print("\nTest stopped.")
+        print("\n\nTest manually stopped. Shutting down and centering...")
+        # 3. Safely stop everything if you abort the test
+        bb8.stop_all()
+        
+        # 2. WAIT for the signals to physically reach the drivers!
+        time.sleep(0.5) 
+        
+        # 3. Explicitly release the DC motors before Python dies
+        bb8.DC_motor1.close()
+        bb8.DC_motor2.close()
+        bb8.Turn_motor.close()
+        
+        print("BB-8 safely stopped.")
 
 if __name__ == "__main__":
-    run_pendulum_pid_test()
+    run_balance_test()
