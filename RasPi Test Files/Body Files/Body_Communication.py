@@ -1,18 +1,16 @@
 import os
 import time
+import socket
 
 # --- 1. HARDWARE PWM FIX ---
 os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
 
 # --- 2. IMPORT MOTOR LIBRARIES ---
-import socket
 from Movement_Functions import BB8Movement
 
-# Initialize the BB-8 Movement class & Functions
 bb8 = BB8Movement()
 bb8.enable_system() 
 
-# Set up the UDP socket
 UDP_IP = "0.0.0.0" 
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -23,13 +21,8 @@ print(f"Motor Pi: Listening for Head Pi on port {UDP_PORT}...")
 
 last_command_time = time.time()
 TIMEOUT_SECONDS = 0.5
-
 current_command = "STOP"
-previous_command = "NONE" # Track the last executed command
-
-# Variables for calculating instruction rate
-packet_count = 0
-rate_timer = time.time()
+previous_command = "NONE"
 
 try:
     while True:
@@ -38,35 +31,20 @@ try:
         try:
             data, addr = sock.recvfrom(1024)
             new_command = data.decode('utf-8')
-            
-            packet_count += 1
-            
-            # Network update
             if new_command != current_command:
                 current_command = new_command
-            
-            last_command_time = current_time # Pet the watchdog timer
-            
+            last_command_time = current_time 
         except BlockingIOError:
             pass
 
-        # --- Rate Printing Logic ---
-        if current_time - rate_timer >= 1.0:
-            if current_command != "STOP" or packet_count > 0:
-                print(f"--- Data Rate: {packet_count} packets/sec ---")
-            packet_count = 0
-            rate_timer = current_time
-
-        # --- SAFETY WATCHDOG TIMEOUT ---
+        # SAFETY WATCHDOG
         if current_time - last_command_time > TIMEOUT_SECONDS:
             if current_command != "STOP":
-                print("--- CONNECTION LOST! EXECUTING EMERGENCY STOP ---")
                 current_command = "STOP"
         
-        # --- MOTOR EXECUTION LOGIC (STATE MACHINE) ---
-        # Only update the hardware if the command has ACTUALLY changed
+        # --- MOTOR EXECUTION LOGIC ---
         if current_command != previous_command:
-            print(f"[{time.strftime('%H:%M:%S')}] Executing Hardware State: '{current_command}'")
+            print(f"[{time.strftime('%H:%M:%S')}] Executing: '{current_command}'")
             
             if current_command == "FORWARD":
                 bb8.drive(0.5)
@@ -78,18 +56,18 @@ try:
                 bb8.spin_head(-0.5)
             elif current_command == "SPIN_HEAD_RIGHT":
                 bb8.spin_head(0.5)
-            
-            # Update the tracker so it doesn't execute again until necessary
+            elif current_command == "SCAN":
+                # Debug print to prove the Body Pi hears the command
+                print(">>> SCAN SIGNAL RECEIVED: Attempting to spin <<<")
+                # Increased throttle from 0.2 to 0.5 to overcome magnet friction
+                bb8.spin_head(0.5)
             previous_command = current_command
         
-        time.sleep(0.01) # 100Hz loop frequency
+        time.sleep(0.01)
 
 except KeyboardInterrupt:
-    print("\nCtrl+C detected. Shutting down Body Pi...")
+    print("\nShutting down Body Pi...")
 finally:
-    print("Cleaning up hardware states...")
     bb8.rest_all_servos() 
     bb8.stop_all() 
-    time.sleep(0.5) 
-    sock.close() 
-    print("Shutdown complete.")
+    sock.close()

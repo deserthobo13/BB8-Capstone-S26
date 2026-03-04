@@ -1,4 +1,6 @@
 import time
+import sys
+import os
 from Movement_Functions import BB8Movement
 
 def run_balance_test():
@@ -31,21 +33,21 @@ def run_balance_test():
             # Run the loop rapidly. 0.02 seconds = 50Hz update rate. 
             # You want this to run fast so the D (Derivative) term works smoothly.
             time.sleep(0.02)
-            
+
     except KeyboardInterrupt:
         print("\n\nTest manually stopped. Shutting down and centering...")
-        # 3. Safely stop everything if you abort the test
+        
+        # 1. Command everything to zero
         bb8.stop_all()
+        bb8.rest_all_servos() 
         
-        # 2. WAIT for the signals to physically reach the drivers!
-        time.sleep(0.5) 
-        
-        # 3. Explicitly release the DC motors before Python dies
-        bb8.DC_motor1.close()
-        bb8.DC_motor2.close()
-        bb8.Turn_motor.close()
+        # 2. Give pigpiod time to actually receive the zero command
+        time.sleep(0.1)
         
         print("BB-8 safely stopped.")
+        
+        # 3. HARD EXIT: Kills Python instantly before gpiozero can release the pins
+        os._exit(0)
 
 if __name__ == "__main__":
     run_balance_test()
