@@ -119,8 +119,8 @@ class BB8Movement:
         current_roll = self.imu.get_roll()
         
         # 2. Maps the roll and pitch to the head servo angles.
-        level_head_fb = 90 - current_pitch
-        level_head_sts = 90 - current_roll
+        level_head_fb = 90 + current_pitch
+        level_head_sts = 90 + current_roll
         
         # 3. Sets the head servos to the leveling variables
         self.set_head_fb(level_head_fb)
