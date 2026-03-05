@@ -22,6 +22,14 @@ class IMUSensor:
         except OSError:
             # BNO055 sometimes throws I2C stretch errors. Just return 0.0 safely.
             return 0.0
+    def get_roll(self):
+        try:
+            angles = self.sensor.euler
+            if angles is None or angles[1] is None: # Adjust index as needed
+                return 0.0
+            return angles[1]
+        except OSError:
+            return 0.0
 
 # --- TESTING BLOCK ---
 # This ONLY runs if you type `python IMU.py` in the terminal.
@@ -33,6 +41,7 @@ if __name__ == "__main__":
         try:
             print(f"Euler angle: {imu.sensor.euler}")
             print(f"Pitch (Stabilization): {imu.get_pitch()}")
+            print(f"Roll: {imu.get_roll()}")
         except Exception as e:
             print(f"Error reading sensor: {e}")
         

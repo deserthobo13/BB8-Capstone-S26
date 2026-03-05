@@ -100,7 +100,7 @@ class BB8Movement:
 
     def update_balance(self):
         """
-        THE CORE PID LOOP. Must be called as fast as possible in the main script.
+        THE CORE PID LOOP. First part balances the robot.
         """
         # 1. Get current lean angle from the IMU
         current_pitch = self.imu.get_pitch()
@@ -113,10 +113,22 @@ class BB8Movement:
         
         # 4. Command the servos (set_swing handles the min/max clamping internally)
         self.set_swing(target_servo_degrees)
+        
+        "The head leveling loop that keeps the head upright."
+        # 1. Calculates the roll of the robot for x-axis tilt
+        current_roll = self.imu.get_roll()
+        
+        # 2. Maps the roll and pitch to the head servo angles.
+        level_head_fb = 90 - current_pitch
+        level_head_sts = 90 - current_roll
+        
+        # 3. Sets the head servos to the leveling variables
+        self.set_head_fb(level_head_fb)
+        self.set_head_sts(level_head_sts)
 
     # --- HEAD CONTROLS ---
     def set_head_fb(self, degrees):
-        """Tilts head forward/backward. Safe range 55 to 125"""
+        """Tilts head forward/backward. Safe range 55 to 125"""        
         self.current_head_fb = max(55, min(125, degrees))
         self.head_fb.angle = self.current_head_fb + 15
 
