@@ -2,7 +2,7 @@ import time
 import os
 import busio
 os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
-from gpiozero import PWMOutputDevice, OutputDevice
+# from gpiozero import PWMOutputDevice, OutputDevice
 import board
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
@@ -63,14 +63,7 @@ class BB8Movement:
     # --- MAIN DRIVE & STEERING ---
     def drive(self, speed):
         """
-        Drive the main motors. 
-        speed: -1.0 (Full Reverse) to 1.0 (Full Forward). 0.0 is Stop.
-        # Clamping input and applying the 0.15 scale factor from your original code
-        speed_val = max(-1.0, min(1.0, speed)) 
-        pwm_val = 0.5 + (speed_val * 0.15)
-        
-        self.DC_motor1.value = pwm_val
-        self.DC_motor2.value = pwm_val        
+        Drive the main motors.    
         """
         max_speed_factor = 0.30
         speed_val = max(-1.0, min(1.0, speed)) * max_speed_factor
@@ -102,27 +95,27 @@ class BB8Movement:
         """
         THE CORE PID LOOP. First part balances the robot.
         """
-        # 1. Get current lean angle from the IMU
+        # Get current lean angle from the IMU
         current_pitch = self.imu.get_pitch()
 
-        # 2. Compute the PID correction
+        # Compute the PID correction
         pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
 
         # 3. Apply the hardware mapping (90 - correction)
         target_servo_degrees = 90 - pid_correction
         
-        # 4. Command the servos (set_swing handles the min/max clamping internally)
+        # Command the servos (set_swing handles the min/max clamping internally)
         self.set_swing(target_servo_degrees)
         
         "The head leveling loop that keeps the head upright."
-        # 1. Calculates the roll of the robot for x-axis tilt
+        # Calculates the roll of the robot for x-axis tilt
         current_roll = self.imu.get_roll()
         
-        # 2. Maps the roll and pitch to the head servo angles.
-        level_head_fb = 90 + current_pitch
-        level_head_sts = 90 + current_roll
+        # Maps the roll and pitch to the head servo angles.
+        level_head_fb = 90 - current_pitch
+        level_head_sts = 90 - current_roll
         
-        # 3. Sets the head servos to the leveling variables
+        # Sets the head servos to the leveling variables
         self.set_head_fb(level_head_fb)
         self.set_head_sts(level_head_sts)
 
