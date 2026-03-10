@@ -1,0 +1,166 @@
+import time
+import os
+import busio
+os.environ['GPIOZERO_PIN_FACTORY'] = 'pigpio'
+# from gpiozero import PWMOutputDevice, OutputDevice
+import board
+from adafruit_pca9685 import PCA9685
+from adafruit_motor import servo
+from gpiozero import PhaseEnableMotor as Motor
+from PID import PIDController
+from Matt_Edit_IMU import IMUSensor
+
+
+class BB8Movement:
+    def __init__(self):
+        print("Initializing BB-8 Hardware...")
+        
+        # 1. INITIALIZE SENSORS & PID
+        self.imu = IMUSensor()
+        
+        # Initialize PID with the starter values from your dummy test
+        self.balance_pid = PIDController(kp=1.0, ki=0.0, kd=0.1) 
+        self.target_pitch = 0.0 # 0 degrees = perfectly upright
+        
+        # 1. INITIALIZE I2C & PCA9685
+        self.i2c = busio.I2C(board.SCL, board.SDA)
+        self.pca = PCA9685(self.i2c)
+        self.pca.frequency = 50 
+
+        # 2. DEFINE MOTORS (Main Drive & Turn)
+        # Phase = Direction pin, enable = PWM speed pin
+        '''
+        The below code was used for the anti phase mode instead of the signed magnitude.
+        self.DC_motor1 = PWMOutputDevice(13, initial_value=0.5, frequency=10000)
+        self.DC_motor2 = PWMOutputDevice(18, initial_value=0.5, frequency=10000)
+        self.Turn_motor = PWMOutputDevice(19, initial_value=0.5, frequency=10000)
+        '''
+        self.DC_motor1 = Motor(phase=5, enable=13, pwm=True)
+        self.DC_motor2 = Motor(phase=6, enable=18, pwm=True)
+        self.Turn_motor = Motor(phase=26, enable=19, pwm=True)
+        
+        # 3. DEFINE SERVOS
+        self.swing_servo = servo.Servo(self.pca.channels[0])
+        self.head_fb = servo.Servo(self.pca.channels[1])       # Forward/Backward
+        self.head_sts = servo.Servo(self.pca.channels[2])      # Side-to-Side
+        self.head_rotate = servo.ContinuousServo(self.pca.channels[3], min_pulse=810, max_pulse=2300)
+        self.swing_servo2 = servo.Servo(self.pca.channels[4])
+
+        # --- STATE VARIABLES ---
+        self.current_head_fb = 90
+        self.current_head_sts = 90
+        self.current_swing = 90
+
+    # --- POWER MANAGEMENT ---
+    def enable_system(self):
+        """No relays, so this will soon be removed"""
+        pass
+    def disable_system(self):
+        """No relays, so this will also soon be removed."""
+        self.stop_all()
+        self.rest_all_servos()
+
+    # --- MAIN DRIVE & STEERING ---
+    def drive(self, speed):
+        """
+        Drive the main motors.    
+        """
+        max_speed_factor = 0.30
+        speed_val = max(-1.0, min(1.0, speed)) * max_speed_factor
+        
+        self.DC_motor1.value = speed_val
+        self.DC_motor2.value = speed_val
+
+    def steer(self, direction):
+        """
+        Steer the internal pendulum.
+        direction: -1 (Left), 1 (Right), 0 (Center)
+        if direction < -0.5:
+            self.Turn_motor.value = 0 # Turn Left
+        elif direction > 0.5:
+            self.Turn_motor.value = 1 # Turn Right
+        else:
+            self.Turn_motor.value = 0.5 # Center
+        """
+        self.Turn_motor.value = direction
+
+    def set_swing(self, degrees):
+        """Sets internal pendulum swing. Safe range 70 to 117"""
+        self.current_swing = max(70, min(117, degrees))
+        difference = self.current_swing - 90
+        self.swing_servo.angle = 90 + difference
+        self.swing_servo2.angle = 90 - difference
+
+    def update_balance(self):
+        """
+        THE CORE PID LOOP. First part balances the robot.
+        """
+        # Get current lean angle from the IMU
+        current_pitch = self.imu.get_pitch()
+
+        # Compute the PID correction
+        pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
+
+        # 3. Apply the hardware mapping (90 - correction)
+        target_servo_degrees = 90 - pid_correction
+        
+        # Command the servos (set_swing handles the min/max clamping internally)
+        self.set_swing(target_servo_degrees)
+        
+        "The head leveling loop that keeps the head upright."
+        # Calculates the roll of the robot for x-axis tilt
+        current_roll = self.imu.get_roll()
+        
+        # Maps the roll and pitch to the head servo angles.
+        level_head_fb = 90 - current_pitch
+        level_head_sts = 90 - current_roll
+        
+        # Sets the head servos to the leveling variables
+        self.set_head_fb(level_head_fb)
+        self.set_head_sts(level_head_sts)
+
+    # --- HEAD CONTROLS ---
+    def set_head_fb(self, degrees):
+        """Tilts head forward/backward. Safe range 55 to 125"""        
+        self.current_head_fb = max(55, min(125, degrees))
+        self.head_fb.angle = self.current_head_fb + 15
+
+    def set_head_sts(self, degrees):
+        """Tilts head side-to-side. Safe range 40 to 140"""
+        self.current_head_sts = max(40, min(140, degrees))
+        self.head_sts.angle = self.current_head_sts + 5
+
+    def spin_head(self, throttle):
+        """
+        Spins the head continuously.
+        throttle: -1.0 (Spin Left) to 1.0 (Spin Right). 0.0 is Stop.
+        """
+        self.head_rotate.throttle = max(-1.0, min(1.0, throttle))
+
+    # --- UTILITY & SAFETY ---
+    def stop_all(self):
+        """Instantly stops all motors and centers servos"""
+        self.DC_motor1.value = 0
+        self.DC_motor2.value = 0
+        self.Turn_motor.value = 0
+        self.head_rotate.throttle = 0
+        self.set_swing(90)
+        self.set_head_fb(90)
+        self.set_head_sts(90)
+
+    def rest_all_servos(self):
+        """Kills power to servos to prevent overheating"""
+        for i in range(5):
+            self.pca.channels[i].duty_cycle = 0
+    
+    def drive_and_steer(self, drive_speed, steer_val):
+        """
+        drive_speed: -1.0 to 1.0 (Forward/Back)
+        steer_val: -1.0 to 1.0 (Pendulum tilt for turning)
+        """
+        # Set main driving speed
+        self.drive(drive_speed)
+        
+        # Set steering tilt
+        # Ensure it stays within safe bounds for your Turn_motor
+        self.Turn_motor.value = max(-1.0, min(1.0, steer_val))
