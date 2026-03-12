@@ -13,12 +13,21 @@ from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 from gpiozero import PhaseEnableMotor, OutputDevice
 
-# 2. INITIALIZE HARDWARE
+# Imports for stability
+from PID import PIDController
+from IMU import IMUSensor
+
+# INITIALIZE HARDWARE
 i2c = busio.I2C(board.SCL, board.SDA)
 pca = PCA9685(i2c)
 pca.frequency = 50 
 
-# 3. INITIALIZE PYGAME FOR CONTROLLER
+# Initialize IMU sensors and PID
+imu = IMUSensor()
+balance_pid = PIDController(kp=1.0, ki=0.0, kd=0.1)
+target_pitch = 0.0  # Target angle for self-balancing (upright)
+
+# INITIALIZE PYGAME FOR CONTROLLER
 pygame.init()
 pygame.joystick.init()
 
@@ -30,7 +39,7 @@ except pygame.error:
     print("No controller found. Please connect your DualSense.")
     sys.exit()
 
-# 4. DEFINE MOTORS & SERVOS (Sign-Magnitude Mode)
+# DEFINE MOTORS, SERVOS & RELAYS
 # Phase = Direction, Enable = PWM Speed
 DC_motor1 = PhaseEnableMotor(phase=5, enable=13, pwm=True)
 DC_motor2 = PhaseEnableMotor(phase=6, enable=18, pwm=True)
@@ -42,23 +51,31 @@ head_sts = servo.Servo(pca.channels[1])
 head_rotate = servo.ContinuousServo(pca.channels[3], min_pulse=810, max_pulse=2300)
 swing_servo2 = servo.Servo(pca.channels[4])
 
-# --- STATE VARIABLES ---
-current_head_fb = 90
-current_head_sts = 90
-current_swing = 90
+# Initialize Relays (Defaults to outputting 0V / Low)
+relay1 = OutputDevice(20, initial_value=False)
+relay2 = OutputDevice(21, initial_value=False)
 
 # 5. HELPER FUNCTIONS
 def set_swing(degrees):
-    # Safe range 70 to 117
+    # Adjust the min and max limits if your offset pushes the pendulum too far
     degrees = max(70, min(117, degrees))
-    difference = degrees - 90
+    
+    # --- PENDULUM HARDWARE OFFSET ---
+    # Change this number to physically center the pendulum. 
+    # Try +5 or -5 to see which way it physically shifts the weight.
+    offset = -1
+    
+    # Calculate how far from center we need to be, including our physical offset
+    difference = (degrees - 90) + offset
+    
+    # Apply to both servos (one adds, one subtracts because they are mirrored)
     swing_servo.angle = 90 + difference
     swing_servo2.angle = 90 - difference
 
 def set_head_fb(degrees):
     # Safe range 55 to 125
     degrees = max(55, min(125, degrees))
-    head_fb.angle = degrees + 15
+    head_fb.angle = degrees - 5 
 
 def set_head_sts(degrees):
     # Safe range 40 to 140
@@ -75,38 +92,86 @@ test_choice = input("Select Mode:\n1: DC Motor Test\n2: Swing Test\n3: Head Test
 
 if test_choice == "4": PS5_control_mode = True
 
+# --- EMA FILTER VARIABLES SETUP ---
+# We initialize these at 90.0 degrees (center) before the loop starts
+smoothed_head_fb = 90.0
+smoothed_head_sts = 90.0
+smoothed_swing = 90.0
+
+# Tuning factors: 1.0 is instant (no smoothing), 0.01 is extremely slow. 
+# Tweak these if the head/swing is too sluggish or too jittery.
+alpha_head = 1.0
+alpha_swing = 0.30
+
 # 7. MAIN EXECUTION LOOP
 print("\n--- SYSTEM ACTIVE ---")
 print("PS BUTTON: Emergency Stop | X BUTTON: Reset All")
-print("L1/R1: Head Spin | D-PAD L/R: Steering | L-STICK: Drive/Swing | R-STICK: Head Tilt")
+print("L1/R1: Head Spin | D-PAD L/R: Steering | L-STICK Y: Drive")
+
+# Turn on relays if entering PS5 mode (Outputs 3.3V)
+if PS5_control_mode:
+    relay1.on()
+    relay2.on()
+    print("Relays Powered ON (3.3V Active)")
 
 try:
     while True:
         if PS5_control_mode:
             pygame.event.pump()
+            
+            # --- A. STABILITY CONTROL (AUTOMATED) ---
+            # 1. Get IMU data
+            current_pitch = imu.get_pitch()
+            current_roll = imu.get_roll()
+            
+            # 2. Compute PID for pendulum swing WITH SMOOTHING
+            pid_correction = balance_pid.compute(target_pitch, current_pitch)
+            target_swing = 90 - pid_correction
+            
+            # Apply EMA filter to the main swing so the heavy motors don't jerk
+            smoothed_swing = (alpha_swing * target_swing) + ((1 - alpha_swing) * smoothed_swing)
+            set_swing(round(smoothed_swing, 1))
+            
+            # 3. Automatic head levelling (WITH DEADZONE & SMOOTHING)
+            head_deadzone = 0 # Degrees of tilt to ignore 
+            
+            # Apply the deadzone: if the tilt is too small, treat it as 0
+            if abs(current_roll) < head_deadzone:
+                active_roll = 0.0
+            else:
+                active_roll = current_roll - head_deadzone if current_roll > 0 else current_roll + head_deadzone
 
-            # --- A. SYSTEM BUTTONS ---
+            if abs(current_pitch) < head_deadzone:
+                active_pitch = 0.0
+            else:
+                active_pitch = current_pitch - head_deadzone if current_pitch > 0 else current_pitch + head_deadzone
+
+            # Calculate TARGET servo positions 
+            target_head_fb = 90 + active_roll   
+            target_head_sts = 90 + active_pitch 
+            
+            # Apply EMA filter (Shock Absorber) to the head servos
+            smoothed_head_fb = (alpha_head * target_head_fb) + ((1 - alpha_head) * smoothed_head_fb)
+            smoothed_head_sts = (alpha_head * target_head_sts) + ((1 - alpha_head) * smoothed_head_sts)
+            
+            # Send the smoothed data to the servos (rounded to 1 decimal)
+            set_head_fb(round(smoothed_head_fb, 1))
+            set_head_sts(round(smoothed_head_sts, 1))
+
+            # --- B. SYSTEM BUTTONS ---
             if joystick.get_button(10): # PS Button (Kill)
                 raise KeyboardInterrupt
             
-            if joystick.get_button(0):  # X Button (Reset)
+            if joystick.get_button(0):  # X Button (Reset Drive & Turn)
                 DC_motor1.value = 0 # True Zero
                 DC_motor2.value = 0
                 Turn_motor.value = 0
                 head_rotate.throttle = 0
-                current_head_fb = 90
-                current_head_sts = 90
-                current_swing = 90
-                set_swing(90)
-                set_head_fb(90)
-                set_head_sts(90)
-                print("Resetting Positions...")
+                print("Motors Reset to Zero...")
 
-            # --- B. LEFT STICK: DRIVE (Y) & SWING (X) ---
+            # --- C. LEFT STICK: DRIVE (Y-Axis Only) ---
             ly_axis = -joystick.get_axis(1) # Drive Y
-            lx_axis = joystick.get_axis(0)  # Swing X
             
-            # Drive Logic (Natively handles -1.0 to 1.0 in PhaseEnable mode)
             if abs(ly_axis) > 0.1:
                 speed = ly_axis * 0.30 # Adjust this multiplier for max speed
                 DC_motor1.value = speed
@@ -115,53 +180,25 @@ try:
                 DC_motor1.value = 0
                 DC_motor2.value = 0
 
-            # Swing Logic with Auto-Center
-            if abs(lx_axis) > 0.1:
-                current_swing += (lx_axis * 2.5)
-            else:
-                if current_swing > 91:
-                    current_swing -= 1.5
-                elif current_swing < 89:
-                    current_swing += 1.5
-                else:
-                    current_swing = 90
-            set_swing(current_swing)
-
-            # --- C. RIGHT STICK: SLOW HEAD TILT ---
-            rx_axis = joystick.get_axis(3) # Side-to-Side
-            ry_axis = joystick.get_axis(4) # Forward-Backward
-            
-            # Smooth Head Side-to-Side
-            if abs(rx_axis) > 0.1:
-                current_head_sts -= (rx_axis * 1.0) # Speed set to 1.0 (Cinematic)
-                current_head_sts = max(40, min(140, current_head_sts))
-                set_head_sts(current_head_sts)
-
-            # Smooth Head Forward-Backward
-            if abs(ry_axis) > 0.1:
-                current_head_fb += (ry_axis * 1.0) 
-                current_head_fb = max(55, min(125, current_head_fb))
-                set_head_fb(current_head_fb)
-
             # --- D. D-PAD: STEERING (TURN MOTOR) ---
             hat = joystick.get_hat(0)
             if hat[0] == -1:
-                Turn_motor.value = -1 # Turn Left (Swap to 1 if it steers backwards)
+                Turn_motor.value = 1 # Turn Left 
             elif hat[0] == 1:
-                Turn_motor.value = 1  # Turn Right
+                Turn_motor.value = -1  # Turn Right
             else:
                 Turn_motor.value = 0  # True Zero stop
 
             # --- E. BUMPERS: HEAD ROTATION (SPIN) ---
-            # L1 is Button 4, R1 is Button 5
             if joystick.get_button(4):
                 head_rotate.throttle = -1.0 # Spin Left
             elif joystick.get_button(5):
                 head_rotate.throttle = 1.0  # Spin Right
             else:
-                head_rotate.throttle = 0     # Stop Spin
+                head_rotate.throttle = -0.05     # Stop Spin
 
-            time.sleep(0.01)
+            # FIXED TIMING: 50Hz = 0.02 seconds to match PCA hardware frequency
+            time.sleep(0.02)
 
         # --- ONE TIME TESTS ---
         elif test_choice == "1":
@@ -180,5 +217,11 @@ finally:
     Turn_motor.value = 0
     head_rotate.throttle = 0
     rest_all_servos()
+    
+    # Power down relays (Outputs 0V / Safe State)
+    relay1.off()
+    relay2.off()
+    print("Relays Powered OFF")
+    
     pygame.quit()
     sys.exit()

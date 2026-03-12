@@ -30,6 +30,11 @@ class IMUSensor:
             return angles[1]
         except OSError:
             return 0.0
+    def get_linear_acceleration(self):
+        try:
+            return self.sensor.linear_acceleration
+        except OSError:
+            return (0.0, 0.0, 0.0)
 
 # --- TESTING BLOCK ---
 # This ONLY runs if you type `python IMU.py` in the terminal.

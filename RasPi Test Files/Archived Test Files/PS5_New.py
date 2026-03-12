@@ -75,7 +75,7 @@ def set_swing(degrees):
 def set_head_fb(degrees):
     # Safe range 55 to 125
     degrees = max(55, min(125, degrees))
-    head_fb.angle = degrees -5 
+    head_fb.angle = degrees - 5 
 
 def set_head_sts(degrees):
     # Safe range 40 to 140
@@ -91,6 +91,17 @@ PS5_control_mode = False
 test_choice = input("Select Mode:\n1: DC Motor Test\n2: Swing Test\n3: Head Test\n4: PS5 Controller Mode\nChoice: ")
 
 if test_choice == "4": PS5_control_mode = True
+
+# --- EMA FILTER VARIABLES SETUP ---
+# We initialize these at 90.0 degrees (center) before the loop starts
+smoothed_head_fb = 90.0
+smoothed_head_sts = 90.0
+smoothed_swing = 90.0
+
+# Tuning factors: 1.0 is instant (no smoothing), 0.01 is extremely slow. 
+# Tweak these if the head/swing is too sluggish or too jittery.
+alpha_head = 1.0
+alpha_swing = 0.30
 
 # 7. MAIN EXECUTION LOOP
 print("\n--- SYSTEM ACTIVE ---")
@@ -113,19 +124,21 @@ try:
             current_pitch = imu.get_pitch()
             current_roll = imu.get_roll()
             
-            # 2. Compute PID for pendulum swing
+            # 2. Compute PID for pendulum swing WITH SMOOTHING
             pid_correction = balance_pid.compute(target_pitch, current_pitch)
             target_swing = 90 - pid_correction
-            set_swing(target_swing)
             
-            # 3. Automatic head levelling (WITH DEADZONE)
-            head_deadzone = 5 # Degrees of tilt to ignore (adjust if it still jitters)
+            # Apply EMA filter to the main swing so the heavy motors don't jerk
+            smoothed_swing = (alpha_swing * target_swing) + ((1 - alpha_swing) * smoothed_swing)
+            set_swing(round(smoothed_swing, 1))
+            
+            # 3. Automatic head levelling (WITH DEADZONE & SMOOTHING)
+            head_deadzone = 0 # Degrees of tilt to ignore 
             
             # Apply the deadzone: if the tilt is too small, treat it as 0
             if abs(current_roll) < head_deadzone:
                 active_roll = 0.0
             else:
-                # Optional: Smooth the transition so it doesn't "snap" when crossing the deadzone
                 active_roll = current_roll - head_deadzone if current_roll > 0 else current_roll + head_deadzone
 
             if abs(current_pitch) < head_deadzone:
@@ -133,12 +146,17 @@ try:
             else:
                 active_pitch = current_pitch - head_deadzone if current_pitch > 0 else current_pitch + head_deadzone
 
-            # Calculate servo positions using the deadzoned values
-            level_head_fb = 90 + active_roll   
-            level_head_sts = 90 + active_pitch 
+            # Calculate TARGET servo positions 
+            target_head_fb = 90 + active_roll   
+            target_head_sts = 90 + active_pitch 
             
-            set_head_fb(level_head_fb)
-            set_head_sts(level_head_sts)
+            # Apply EMA filter (Shock Absorber) to the head servos
+            smoothed_head_fb = (alpha_head * target_head_fb) + ((1 - alpha_head) * smoothed_head_fb)
+            smoothed_head_sts = (alpha_head * target_head_sts) + ((1 - alpha_head) * smoothed_head_sts)
+            
+            # Send the smoothed data to the servos (rounded to 1 decimal)
+            set_head_fb(round(smoothed_head_fb, 1))
+            set_head_sts(round(smoothed_head_sts, 1))
 
             # --- B. SYSTEM BUTTONS ---
             if joystick.get_button(10): # PS Button (Kill)
@@ -165,14 +183,13 @@ try:
             # --- D. D-PAD: STEERING (TURN MOTOR) ---
             hat = joystick.get_hat(0)
             if hat[0] == -1:
-                Turn_motor.value = 1 # Turn Left (Swap to 1 if it steers backwards)
+                Turn_motor.value = 1 # Turn Left 
             elif hat[0] == 1:
                 Turn_motor.value = -1  # Turn Right
             else:
                 Turn_motor.value = 0  # True Zero stop
 
             # --- E. BUMPERS: HEAD ROTATION (SPIN) ---
-            # L1 is Button 4, R1 is Button 5
             if joystick.get_button(4):
                 head_rotate.throttle = -1.0 # Spin Left
             elif joystick.get_button(5):
@@ -180,7 +197,8 @@ try:
             else:
                 head_rotate.throttle = -0.05     # Stop Spin
 
-            time.sleep(0.01)
+            # FIXED TIMING: 50Hz = 0.02 seconds to match PCA hardware frequency
+            time.sleep(0.02)
 
         # --- ONE TIME TESTS ---
         elif test_choice == "1":
@@ -200,7 +218,7 @@ finally:
     head_rotate.throttle = 0
     rest_all_servos()
     
-    # Power down relays (Outputs 0V)
+    # Power down relays (Outputs 0V / Safe State)
     relay1.off()
     relay2.off()
     print("Relays Powered OFF")
