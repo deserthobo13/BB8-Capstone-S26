@@ -73,16 +73,16 @@ class BB8Movement:
 
     def steer(self, direction):
         """
-        Steer the internal pendulum.
-        direction: -1 (Left), 1 (Right), 0 (Center)
-        if direction < -0.5:
-            self.Turn_motor.value = 0 # Turn Left
-        elif direction > 0.5:
-            self.Turn_motor.value = 1 # Turn Right
-        else:
-            self.Turn_motor.value = 0.5 # Center
+        Steer the internal pendulum drive.
+        'direction' is a float from -1.0 (Full Left) to 1.0 (Full Right).
         """
-        self.Turn_motor.value = direction
+        max_turn_speed = 0.30  # Cap turning speed to 30% for stability
+        
+        # Clamp input and apply the speed limit
+        turn_val = max(-1.0, min(1.0, direction)) * max_turn_speed
+        
+        # gpiozero handles the signed magnitude (Phase/PWM) automatically
+        self.Turn_motor.value = turn_val
 
     def set_swing(self, degrees):
         """Sets internal pendulum swing. Safe range 70 to 117"""

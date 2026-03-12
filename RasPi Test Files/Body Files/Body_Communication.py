@@ -61,6 +61,10 @@ try:
                 print(">>> SCAN SIGNAL RECEIVED: Attempting to spin <<<")
                 # Increased throttle from 0.2 to 0.5 to overcome magnet friction
                 bb8.spin_head(0.5)
+            elif current_command == "TURN_RIGHT":
+                bb8.steer(1)
+            elif current_command == "TURN_LEFT":
+                bb8.steer(-1)
             previous_command = current_command
         
         time.sleep(0.01)
