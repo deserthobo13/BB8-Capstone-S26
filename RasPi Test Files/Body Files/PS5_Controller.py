@@ -16,6 +16,7 @@ from gpiozero import PhaseEnableMotor, OutputDevice
 # Imports for stability
 from PID import PIDController
 from IMU import IMUSensor
+import Dead_Reckoning
 
 # INITIALIZE HARDWARE
 i2c = busio.I2C(board.SCL, board.SDA)
@@ -123,6 +124,7 @@ try:
             # 1. Get IMU data
             current_pitch = imu.get_pitch()
             current_roll = imu.get_roll()
+            Dead_Reckoning.run_velocity_test() # Run the velocity test to get live velocity and distance data (optional)
             
             # 2. Compute PID for pendulum swing WITH SMOOTHING
             pid_correction = balance_pid.compute(target_pitch, current_pitch)
