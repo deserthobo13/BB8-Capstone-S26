@@ -30,6 +30,14 @@ class IMUSensor:
             return angles[1]
         except OSError:
             return 0.0
+    def get_yaw(self):
+        try:
+            angles = self.sensor.euler
+            if angles is None or angles[0] is None: 
+                return 0.0
+            return angles[0]
+        except OSError:
+            return 0.0
     def get_linear_acceleration(self):
         try:
             return self.sensor.linear_acceleration
