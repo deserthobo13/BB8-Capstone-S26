@@ -20,7 +20,7 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=1.0, ki=0.0, kd=0.1) 
+        self.balance_pid = PIDController(kp=1.0, ki=0.005, kd=0.15) 
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685

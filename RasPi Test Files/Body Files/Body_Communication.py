@@ -74,4 +74,5 @@ except KeyboardInterrupt:
 finally:
     bb8.rest_all_servos() 
     bb8.stop_all() 
+    bb8.disable_system()
     sock.close()
