@@ -7,6 +7,7 @@ import board
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import servo
 from gpiozero import PhaseEnableMotor as Motor
+from gpiozero import OutputDevice
 from PID import PIDController
 from IMU import IMUSensor
 
@@ -29,12 +30,6 @@ class BB8Movement:
 
         # 2. DEFINE MOTORS (Main Drive & Turn)
         # Phase = Direction pin, enable = PWM speed pin
-        '''
-        The below code was used for the anti phase mode instead of the signed magnitude.
-        self.DC_motor1 = PWMOutputDevice(13, initial_value=0.5, frequency=10000)
-        self.DC_motor2 = PWMOutputDevice(18, initial_value=0.5, frequency=10000)
-        self.Turn_motor = PWMOutputDevice(19, initial_value=0.5, frequency=10000)
-        '''
         self.DC_motor1 = Motor(phase=5, enable=13, pwm=True)
         self.DC_motor2 = Motor(phase=6, enable=18, pwm=True)
         self.Turn_motor = Motor(phase=26, enable=19, pwm=True)
@@ -46,17 +41,33 @@ class BB8Movement:
         self.head_rotate = servo.ContinuousServo(self.pca.channels[3], min_pulse=810, max_pulse=2300)
         self.swing_servo2 = servo.Servo(self.pca.channels[4])
 
+        # 4. DEFINE RELAYS
+        self.relay1 = OutputDevice(20, initial_value=False)
+        self.relay2 = OutputDevice(21, initial_value=False)
+
         # --- STATE VARIABLES ---
         self.current_head_fb = 90
         self.current_head_sts = 90
         self.current_swing = 90
 
+        # --- EMA FILTER VARIABLES (HEAD ONLY) ---
+        self.smoothed_head_fb = 90.0
+        self.smoothed_head_sts = 90.0
+        
+        # Alpha controls the smoothing speed (0.01 = extremely slow, 1.0 = instant)
+        # 0.15 is a great starting point for organic, droid-like head movement
+        self.alpha_head = 0.15
+        
     # --- POWER MANAGEMENT ---
     def enable_system(self):
-        """No relays, so this will soon be removed"""
+        self.relay1.on()
+        self.relay2.on()
+        self.balance_pid.reset() # Prevent any integral windup from before the system was enabled
         pass
+    
     def disable_system(self):
-        """No relays, so this will also soon be removed."""
+        self.relay1.off()
+        self.relay2.off()
         self.stop_all()
         self.rest_all_servos()
 
@@ -95,8 +106,11 @@ class BB8Movement:
         """
         THE CORE PID LOOP. First part balances the robot.
         """
-        # Get current lean angle from the IMU
-        current_pitch = self.imu.get_pitch()
+        # 1. UPDATE ALL IMU SENSOR DATA AT ONCE
+        self.imu.update()
+
+        # 2. Get current lean angle from the stored IMU attributes
+        current_pitch = self.imu.pitch
 
         # Compute the PID correction
         pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
@@ -104,20 +118,24 @@ class BB8Movement:
         # 3. Apply the hardware mapping (90 - correction)
         target_servo_degrees = 90 - pid_correction
         
-        # Command the servos (set_swing handles the min/max clamping internally)
+        # Command the swing servos INSTANTLY (No smoothing for stability)
         self.set_swing(target_servo_degrees)
         
-        "The head leveling loop that keeps the head upright."
+        # --- HEAD LEVELING (WITH EMA SMOOTHING) ---
         # Calculates the roll of the robot for x-axis tilt
-        current_roll = self.imu.get_roll()
+        current_roll = self.imu.roll
         
-        # Maps the roll and pitch to the head servo angles.
-        level_head_fb = 90 - current_pitch
-        level_head_sts = 90 - current_roll
+        # Calculate raw TARGET servo angles
+        target_head_fb = 90 - current_pitch
+        target_head_sts = 90 - current_roll
         
-        # Sets the head servos to the leveling variables
-        self.set_head_fb(level_head_fb)
-        self.set_head_sts(level_head_sts)
+        # Apply the EMA filter (Shock Absorber)
+        self.smoothed_head_fb = (self.alpha_head * target_head_fb) + ((1 - self.alpha_head) * self.smoothed_head_fb)
+        self.smoothed_head_sts = (self.alpha_head * target_head_sts) + ((1 - self.alpha_head) * self.smoothed_head_sts)
+        
+        # Send the smoothed data to the servos (rounded to 1 decimal for clean PWM)
+        self.set_head_fb(round(self.smoothed_head_fb, 1))
+        self.set_head_sts(round(self.smoothed_head_sts, 1))
 
     # --- HEAD CONTROLS ---
     def set_head_fb(self, degrees):

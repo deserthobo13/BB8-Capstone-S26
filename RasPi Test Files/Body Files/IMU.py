@@ -8,53 +8,40 @@ class IMUSensor:
         self.i2c = board.I2C()  
         self.sensor = adafruit_bno055.BNO055_I2C(self.i2c)
         time.sleep(1) # Give sensor a moment to boot
-
-    def get_pitch(self):
-        """
-        Main function call for the balance loop used by the PID controller.
-        Returns the pitch angle. Adjust the index [2] if sensor is mounted differently.
-        """
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0
+        self.accel_z = 0.0
+        
+    def update(self):
+        """Call this exactly ONCE at the start of your main loop."""
         try:
             angles = self.sensor.euler
-            if angles is None or angles[2] is None:
-                return 0.0
-            return angles[2]
+            linear_acceleration = self.sensor.linear_acceleration
+            if angles is not None:
+                self.yaw = angles[0] if angles[0] is not None else self.yaw
+                self.roll = angles[1] if angles[1] is not None else self.roll
+                self.pitch = angles[2] if angles[2] is not None else self.pitch
+            if linear_acceleration is not None and linear_acceleration[2] is not None:
+                self.accel_z = linear_acceleration[2]
         except OSError:
-            # BNO055 sometimes throws I2C stretch errors. Just return 0.0 safely.
-            return 0.0
-    def get_roll(self):
-        try:
-            angles = self.sensor.euler
-            if angles is None or angles[1] is None: # Adjust index as needed
-                return 0.0
-            return angles[1]
-        except OSError:
-            return 0.0
-    def get_yaw(self):
-        try:
-            angles = self.sensor.euler
-            if angles is None or angles[0] is None: 
-                return 0.0
-            return angles[0]
-        except OSError:
-            return 0.0
-    def get_linear_acceleration(self):
-        try:
-            return self.sensor.linear_acceleration
-        except OSError:
-            return (0.0, 0.0, 0.0)
+            pass # Handle I2C stretch errors silently to keep loop alive
 
 # --- TESTING BLOCK ---
-# This ONLY runs if you type `python IMU.py` in the terminal.
-# It is completely ignored when imported by BB8_Movement.py
 if __name__ == "__main__":
     imu = IMUSensor()
     print("Starting IMU Test...")
     while True:
         try:
-            print(f"Euler angle: {imu.sensor.euler}")
-            print(f"Pitch (Stabilization): {imu.get_pitch()}")
-            print(f"Roll: {imu.get_roll()}")
+            # 1. Update all sensor data once per loop
+            imu.update()
+            
+            # 2. Print the stored attributes
+            print(f"Raw Euler: {imu.sensor.euler}")
+            print(f"Pitch (Stabilization): {imu.pitch}")
+            print(f"Roll: {imu.roll}")
+            print(f"Yaw: {imu.yaw}")
+            
         except Exception as e:
             print(f"Error reading sensor: {e}")
         

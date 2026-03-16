@@ -1,71 +1,80 @@
-import time
-from IMU import IMUSensor
+class DeadReckoning:
+    def __init__(self):
+        # --- CONFIGURATION ---
+        self.ACCEL_TRIGGER = 0.15     # Start recording when accel exceeds this (m/s^2)
+        self.VELOCITY_STOP = 0.05     # Stop recording when velocity drops below this (m/s)
+        self.MIN_MOVE_TIME = 0.5      # Ignore stops that happen instantly (prevents false starts)
+        self.METERS_TO_INCHES = 39.37
 
-imu = IMUSensor()
+        # --- STATE VARIABLES ---
+        self.velocity = 0.0
+        self.distance = 0.0
+        self.is_moving = False
+        self.move_timer = 0.0
 
-# --- CONFIGURATION ---
-ACCEL_TRIGGER = 0.15     # Start recording when accel exceeds this (m/s^2)
-VELOCITY_STOP = 0.05     # Stop recording when velocity drops below this (m/s)
-MIN_MOVE_TIME = 0.5      # Ignore stops that happen instantly (prevents false starts)
-METERS_TO_INCHES = 39.37
+    def update(self, accel_z, dt):
+        if dt <= 0:
+            return self.velocity, self.distance
 
-def run_velocity_test():
-    velocity = 0.0
-    distance = 0.0
-    is_moving = False
+        # Apply a tiny deadzone to the acceleration
+        clean_accel = accel_z if abs(accel_z) > 0.05 else 0.0
+
+        # 1. TRIGGER START
+        if not self.is_moving:
+            if abs(clean_accel) > self.ACCEL_TRIGGER:
+                self.is_moving = True
+                self.move_timer = 0.0
+                self.velocity = 0.0
+                self.distance = 0.0
+                self.zero_accel_timer = 0.0
+                print("\n>>> MOTION DETECTED. Recording velocity...")
+            else:
+                return self.velocity, self.distance # Return if we aren't moving yet
+
+        # 2. INTEGRATE: We are currently moving
+        self.move_timer += dt
+        self.velocity += clean_accel * dt
+        self.distance += self.velocity * dt
+
+        # 3. TIMEOUT LOGIC (Fixes the infinite coasting bug)
+        if clean_accel == 0.0:
+            self.zero_accel_timer += dt
+        else:
+            self.zero_accel_timer = 0.0 # Reset if we see movement
+
+        # 4. TRIGGER STOP
+        # Stop if velocity naturally drops low enough, OR if we've seen zero acceleration for 0.5 seconds
+        if self.move_timer > self.MIN_MOVE_TIME:
+            if abs(self.velocity) < self.VELOCITY_STOP or self.zero_accel_timer > 0.5:
+                self.is_moving = False
+                print(f"\n[HALT DETECTED] Motion Finished.")
+                print(f"Duration: {self.move_timer:.2f} seconds")
+                print(f"Total Distance: {abs(self.distance * self.METERS_TO_INCHES):.2f} inches")
+                print("--------------------------------")
+                
+                # Force velocity to zero so it doesn't bleed into the next movement
+                self.velocity = 0.0 
+
+        return self.velocity, self.distance
+
+# --- TESTING BLOCK ---
+if __name__ == "__main__":
+    import time
     
-    print("\n[READY] Waiting for Z-axis motion to trigger...")
+    # Dummy test to simulate the main 50Hz loop feeding it data
+    dr = DeadReckoning()
+    print("Simulating a 50Hz control loop feeding data to DeadReckoning...")
+    
+    # Simulate a sudden forward acceleration, coasting, and stopping
+    simulated_accels = [0.0, 0.0, 0.8, 0.8, 0.0, -0.2, -0.2, -0.2, 0.0, 0.0]
     
     last_time = time.time()
-    start_time = None
-
-    while True:
+    for accel in simulated_accels:
+        time.sleep(0.5) # Fake loop delay
         current_time = time.time()
         dt = current_time - last_time
         last_time = current_time
-
-        accel_data = imu.get_linear_acceleration()
-        if accel_data is None: continue
         
-        # Z-axis (Forwards/Backwards)
-        accel_z = accel_data[2]
-
-        # 1. TRIGGER START: Based on Acceleration
-        if not is_moving:
-            if abs(accel_z) > ACCEL_TRIGGER:
-                is_moving = True
-                start_time = current_time
-                print(">>> MOTION DETECTED. Recording velocity...")
-            continue
-
-        # 2. INTEGRATE: v = v + a*dt
-        # We apply a tiny deadzone to the acceleration to keep the velocity clean
-        clean_accel = accel_z if abs(accel_z) > 0.05 else 0.0
-        velocity += clean_accel * dt
-        
-        # 3. INTEGRATE: d = d + v*dt
-        distance += velocity * dt
-
-        # 4. TRIGGER STOP: Based on Velocity
-        # We check if velocity is near zero AND we've been moving for at least a moment
-        elapsed = current_time - start_time
-        if elapsed > MIN_MOVE_TIME and abs(velocity) < VELOCITY_STOP:
-            break
-
-        # Live telemetry
-        print(f"Time: {elapsed:4.1f}s | Vel: {velocity:6.2f} | Dist: {distance * METERS_TO_INCHES:6.2f} in", end="\r")
-        time.sleep(0.01)
-
-    print(f"\n\n[HALT DETECTED] Motion Finished.")
-    print(f"Duration: {current_time - start_time:.2f} seconds")
-    print(f"Total Distance: {abs(distance * METERS_TO_INCHES):.2f} inches")
-    print("--------------------------------")
-
-if __name__ == "__main__":
-    try:
-        while True:
-            run_velocity_test()
-            if input("Run another test? (y/n): ").lower() != 'y':
-                break
-    except KeyboardInterrupt:
-        print("\nExiting...")
+        vel, dist = dr.update(accel, dt)
+        if dr.is_moving:
+            print(f"Accel: {accel:4.1f} | Vel: {vel:5.2f} | Dist: {dist * dr.METERS_TO_INCHES:5.2f} in")
