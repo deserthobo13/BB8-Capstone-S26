@@ -144,13 +144,13 @@ class BB8Movement:
 
     # --- HEAD CONTROLS ---
     def set_head_fb(self, degrees):
-        """Tilts head forward/backward. Safe range 55 to 125"""        
-        self.current_head_fb = max(55, min(125, degrees))
+        """Tilts head forward/backward. Safe range 60 to 120"""        
+        self.current_head_fb = max(60, min(120, degrees))
         self.head_fb.angle = self.current_head_fb + self.head_fb_offset
 
     def set_head_sts(self, degrees):
-        """Tilts head side-to-side. Safe range 40 to 140"""
-        self.current_head_sts = max(40, min(140, degrees))
+        """Tilts head side-to-side. Safe range 60 to 120"""
+        self.current_head_sts = max(60, min(120, degrees))
         self.head_sts.angle = self.current_head_sts + self.head_sts_offset
 
     def spin_head(self, throttle):
