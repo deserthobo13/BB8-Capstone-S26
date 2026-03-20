@@ -49,6 +49,11 @@ class BB8Movement:
         self.current_head_fb = 90
         self.current_head_sts = 90
         self.current_swing = 90
+        
+        # --- INITIAL VALUES ---
+        self.swing_offset = -3.0
+        self.head_fb_offset = 2.5
+        self.head_sts_offset = -2
 
         # --- EMA FILTER VARIABLES (HEAD ONLY) ---
         self.smoothed_head_fb = 90.0
@@ -98,7 +103,7 @@ class BB8Movement:
     def set_swing(self, degrees):
         """Sets internal pendulum swing. Safe range 70 to 117"""
         self.current_swing = max(70, min(117, degrees))
-        difference = self.current_swing - 90
+        difference = self.current_swing - 90 + self.swing_offset
         self.swing_servo.angle = 90 + difference
         self.swing_servo2.angle = 90 - difference
 
@@ -126,8 +131,8 @@ class BB8Movement:
         current_roll = self.imu.roll
         
         # Calculate raw TARGET servo angles
-        target_head_fb = 90 - current_pitch
-        target_head_sts = 90 - current_roll
+        target_head_fb = 90 + current_pitch
+        target_head_sts = 90 + current_roll
         
         # Apply the EMA filter (Shock Absorber)
         self.smoothed_head_fb = (self.alpha_head * target_head_fb) + ((1 - self.alpha_head) * self.smoothed_head_fb)
@@ -141,12 +146,12 @@ class BB8Movement:
     def set_head_fb(self, degrees):
         """Tilts head forward/backward. Safe range 55 to 125"""        
         self.current_head_fb = max(55, min(125, degrees))
-        self.head_fb.angle = self.current_head_fb + 15
+        self.head_fb.angle = self.current_head_fb + self.head_fb_offset
 
     def set_head_sts(self, degrees):
         """Tilts head side-to-side. Safe range 40 to 140"""
         self.current_head_sts = max(40, min(140, degrees))
-        self.head_sts.angle = self.current_head_sts + 5
+        self.head_sts.angle = self.current_head_sts + self.head_sts_offset
 
     def spin_head(self, throttle):
         """
