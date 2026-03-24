@@ -10,6 +10,7 @@ from gpiozero import PhaseEnableMotor as Motor
 from gpiozero import OutputDevice
 from PID import PIDController
 from IMU import IMUSensor
+from Telemetry import TelemetryLogger
 
 
 class BB8Movement:
@@ -63,6 +64,9 @@ class BB8Movement:
         # 0.15 is a great starting point for organic, droid-like head movement
         self.alpha_head = 0.15
         
+        # --- Telemetry Logger ---
+        self.logger = TelemetryLogger()
+        
     # --- POWER MANAGEMENT ---
     def enable_system(self):
         self.relay1.on()
@@ -75,6 +79,8 @@ class BB8Movement:
         self.relay2.off()
         self.stop_all()
         self.rest_all_servos()
+        
+        self.logger.save_to_csv() # Dump telemetry data to disk when the system is disabled
 
     # --- MAIN DRIVE & STEERING ---
     def drive(self, speed):
@@ -119,6 +125,9 @@ class BB8Movement:
 
         # Compute the PID correction
         pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
+
+        # Log the data to RAM
+        self.logger.log_step(current_pitch, self.target_pitch, self.balance_pid)
 
         # 3. Apply the hardware mapping (90 - correction)
         target_servo_degrees = 90 - pid_correction
