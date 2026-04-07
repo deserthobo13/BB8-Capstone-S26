@@ -98,7 +98,7 @@ class BB8Movement:
         Steer the internal pendulum drive.
         'direction' is a float from -1.0 (Full Left) to 1.0 (Full Right).
         """
-        max_turn_speed = 0.30  # Cap turning speed to 30% for stability
+        max_turn_speed = 0.75  # Cap turning speed to 75% for stability
         
         # Clamp input and apply the speed limit
         turn_val = max(-1.0, min(1.0, direction)) * max_turn_speed
