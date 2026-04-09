@@ -10,11 +10,11 @@ import pygame
 from Movement_Functions import BB8Movement
 
 # Import the dead reckoning module
-from Dead_Reckoning import DeadReckoning
+# from Dead_Reckoning import DeadReckoning
 
 # Initialize hardware via class
 bb8 = BB8Movement()
-dr = DeadReckoning()
+# dr = DeadReckoning()
 
 # Initialize pygame for the controller
 pygame.init()
@@ -63,7 +63,7 @@ try:
             
             # --- B. STABILITY CONTROL (AUTOMATED) ---
             z_lin_accel = bb8.imu.accel_z
-            velocity, distance = dr.update(z_lin_accel, dt)
+            # velocity, distance = dr.update(z_lin_accel, dt)
             
             # --- C. SYSTEM BUTTONS ---
             if joystick.get_button(10): # PS Button (Kill)

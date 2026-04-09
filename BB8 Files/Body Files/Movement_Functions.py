@@ -21,7 +21,7 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=1.0, ki=0.005, kd=0.15) 
+        self.balance_pid = PIDController(kp=0.0, ki=0.0, kd=0.0) 
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685
@@ -87,7 +87,7 @@ class BB8Movement:
         """
         Drive the main motors.    
         """
-        max_speed_factor = 0.30
+        max_speed_factor = 0.22
         speed_val = max(-1.0, min(1.0, speed)) * max_speed_factor
         
         self.DC_motor1.value = speed_val
@@ -98,7 +98,7 @@ class BB8Movement:
         Steer the internal pendulum drive.
         'direction' is a float from -1.0 (Full Left) to 1.0 (Full Right).
         """
-        max_turn_speed = 0.75  # Cap turning speed to 75% for stability
+        max_turn_speed = 0.95  # Cap turning speed to 95% for stability
         
         # Clamp input and apply the speed limit
         turn_val = max(-1.0, min(1.0, direction)) * max_turn_speed
