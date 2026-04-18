@@ -50,7 +50,7 @@ class PIDController:
         
         # 2. Integral (Clamped)
         self.integral += self.error * dt
-        self.integral = max(min(self.integral, 40.0), -40.0) 
+        self.integral = max(min(self.integral, 10.0), -10.0) 
         self.i_term = self.ki * self.integral
         
         # 3. Derivative (ON MEASUREMENT + FILTERED)
