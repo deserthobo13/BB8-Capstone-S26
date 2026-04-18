@@ -21,7 +21,7 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=0.2, ki=0.2, kd=0.3) 
+        self.balance_pid = PIDController(kp=0.2, ki=0.2, kd=0.5) 
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685
@@ -225,7 +225,7 @@ class BB8Movement:
         self.enable_system()
         
         start_time = time.time()
-        while time.time() - start_time < 3.0: # Let it balance for 3 seconds
+        while time.time() - start_time < 5.0: # Let it balance for 5 seconds
             self.update_balance()
             # self.logger.log_step(..., ...) # Ensure your logger is running here
             time.sleep(0.01) 
@@ -236,7 +236,7 @@ class BB8Movement:
         
         # 3. Record the dynamic response
         step_time = time.time()
-        while time.time() - step_time < 3.0: # Record for 3 seconds
+        while time.time() - step_time < 4.0: # Record for 4 seconds
             self.update_balance()
             # self.logger.log_step(..., ...)
             time.sleep(0.01)
