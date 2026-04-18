@@ -40,6 +40,9 @@ class BB8Movement:
         self.head_fb = servo.Servo(self.pca.channels[1])       # Forward/Backward
         self.head_sts = servo.Servo(self.pca.channels[2])      # Side-to-Side
         self.head_rotate = servo.ContinuousServo(self.pca.channels[3], min_pulse=810, max_pulse=2300)
+        # --- ADD THIS LINE TO STOP INITIAL CRAWL ---
+        self.head_rotate.throttle = -0.05
+        
         self.swing_servo2 = servo.Servo(self.pca.channels[4])
 
         # 4. DEFINE RELAYS
