@@ -232,7 +232,7 @@ class BB8Movement:
             
         # 2. THE STEP COMMAND
         print("EXECUTING 5-DEGREE STEP!")
-        self.target_pitch = 10.0
+        self.target_pitch = 5.00
         
         # 3. Record the dynamic response
         step_time = time.time()
