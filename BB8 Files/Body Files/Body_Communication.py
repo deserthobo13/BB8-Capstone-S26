@@ -48,11 +48,11 @@ try:
             
             if current_command == "FORWARD":
                 # bb8.drive(0.5)
-                bb8.spin_head(0) # <--- ADD THIS: Stop the head before "driving"
+                bb8.spin_head(-0.05) # <--- ADD THIS: Stop the head before "driving"
                 print(">>> FORWARD SIGNAL RECEIVED: Attempting to drive forward <<<")
             elif current_command == "BACKWARD":
                 # bb8.drive(-0.5)
-                bb8.spin_head(0) # <--- ADD THIS: Stop the head before "driving"
+                bb8.spin_head(-0.05) # <--- ADD THIS: Stop the head before "driving"
                 print(">>> BACKWARD SIGNAL RECEIVED: Attempting to drive backward <<<")
             elif current_command == "STOP":
                 bb8.stop_all()
