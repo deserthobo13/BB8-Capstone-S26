@@ -103,10 +103,10 @@ try:
 
         # Display UI
         cv2.putText(frame, status_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        cv2.imshow("BB-8 Head", frame)
+        # cv2.imshow("BB-8 Head", frame)
         
-        if cv2.waitKey(1) & 0xFF == ord('q'): 
-            break
+        # if cv2.waitKey(1) & 0xFF == ord('q'): 
+            # break
 
 except KeyboardInterrupt:
     print("\nShutting down...")
