@@ -30,11 +30,28 @@ except pygame.error:
 
 # 6. MENU SYSTEM
 PS5_control_mode = False
-test_choice = input("Select Mode:\n1: DC Motor Test\n2: Swing Test\n3: Head Test\n4: PS5 Controller Mode\nChoice: ")
+auto_balance = False
+test_choice = input("Select Mode:\n1: DC Motor Test\n2: Swing Test\n3: Head Test\n4: Step Response Test\n5: PS5 Controller Mode Automated Stability\n6: PS5 Controller Mode\nChoice: ")
 
-if test_choice == "4": 
+if test_choice == "6": 
+    auto_balance = False
     PS5_control_mode = True
     bb8.enable_system()
+
+elif test_choice == "5": 
+    auto_balance = True
+    PS5_control_mode = True
+    bb8.enable_system()
+    
+elif test_choice == "4":
+    print("\n[INITIATING AUTOMATED STEP RESPONSE TEST]")
+    # 1. Call the self-contained function you added to Movement_Functions.py
+    bb8.execute_step_response_test()
+    
+    # 2. Raise a KeyboardInterrupt to intentionally break the script.
+    # This acts as a safe "Go to Finally" command, ensuring your script
+    # cleanly shuts down the motors, kills the relays, and exits Pygame.
+    raise KeyboardInterrupt
 
 # 7. MAIN EXECUTION LOOP
 print("\n--- SYSTEM ACTIVE ---")
@@ -57,14 +74,27 @@ try:
         
         if PS5_control_mode:
             pygame.event.pump()
+            if auto_balance:
+                # --- A. STABILITY CONTROL (AUTOMATED) ---
+                bb8.update_balance()
             
-            # --- A. STABILITY CONTROL (AUTOMATED) ---
-            bb8.update_balance()
-            
-            # --- B. STABILITY CONTROL (AUTOMATED) ---
-            z_lin_accel = bb8.imu.accel_z
-            # velocity, distance = dr.update(z_lin_accel, dt)
-            
+                # --- B. STABILITY CONTROL (AUTOMATED) ---
+                z_lin_accel = bb8.imu.accel_z
+                # velocity, distance = dr.update(z_lin_accel, dt)
+            else: 
+                # MANUAL SWING OVERRIDE (Right Stick Y-Axis)
+                # Note: Pygame usually maps Right Stick Y to axis 3 or 4 depending on the OS.
+                # If axis 3 acts weird (like a trigger), change it to axis 4.
+                ry_axis = -joystick.get_axis(3) 
+                
+                # Map joystick (-1.0 to 1.0) to safe servo degrees (70 to 110)
+                # 90 is perfectly centered. Max tilt is +/- 20 degrees.
+                target_swing = 90 + (ry_axis * 20) 
+                bb8.set_swing(target_swing)
+                
+                # Note: We skip bb8.update_balance(), so the head servos won't auto-level
+                # based on IMU roll/pitch in this mode, which is expected for manual testing!
+                
             # --- C. SYSTEM BUTTONS ---
             if joystick.get_button(10): # PS Button (Kill)
                 raise KeyboardInterrupt

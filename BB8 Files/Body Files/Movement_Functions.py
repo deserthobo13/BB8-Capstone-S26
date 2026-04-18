@@ -21,7 +21,7 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=0.0, ki=0.0, kd=0.0) 
+        self.balance_pid = PIDController(kp=0.5, ki=0.0, kd=0.5) 
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685
@@ -52,7 +52,7 @@ class BB8Movement:
         self.current_swing = 90
         
         # --- INITIAL VALUES ---
-        self.swing_offset = -3.0
+        self.swing_offset = -1.0
         self.head_fb_offset = 2.5
         self.head_sts_offset = -2
 
@@ -66,6 +66,14 @@ class BB8Movement:
         
         # --- Telemetry Logger ---
         self.logger = TelemetryLogger()
+        
+        # --- SLEW RATE VARIABLES ---
+        self.current_drive_val = 0.0
+        self.drive_slew_rate = 0.005  # Adjust this: Lower = slower acceleration, Higher = punchier
+        
+        # --- TURN PULSE VARIABLES (SQUARE WAVE) ---
+        self.turn_pulse_period = 0.00001  # Length of one full cycle in seconds (100ms = 10Hz)
+        self.turn_duty_cycle = 1.0   # 90% ON, 10% OFF
         
     # --- POWER MANAGEMENT ---
     def enable_system(self):
@@ -83,30 +91,66 @@ class BB8Movement:
         self.logger.save_to_csv() # Dump telemetry data to disk when the system is disabled
 
     # --- MAIN DRIVE & STEERING ---
-    def drive(self, speed):
+    def drive(self, target_speed):
         """
-        Drive the main motors.    
+        Drive the main motors with an acceleration/deceleration ramp.
+        'target_speed' is a float from -1.0 (Backward) to 1.0 (Forward).
         """
-        max_speed_factor = 0.22
-        speed_val = max(-1.0, min(1.0, speed)) * max_speed_factor
+        max_speed_factor = 1.0
         
-        self.DC_motor1.value = speed_val
-        self.DC_motor2.value = speed_val
+        # Calculate the final target value the joystick is asking for
+        target_val = max(-1.0, min(1.0, target_speed)) * max_speed_factor
+        
+        # --- SLEW RATE LIMITER (THE RAMP) ---
+        # If target is greater than current, ramp up
+        if self.current_drive_val < target_val:
+            self.current_drive_val += self.drive_slew_rate
+            # Clamp it so we don't overshoot the target
+            if self.current_drive_val > target_val:
+                self.current_drive_val = target_val
+                
+        # If target is less than current, ramp down
+        elif self.current_drive_val > target_val:
+            self.current_drive_val -= self.drive_slew_rate
+            # Clamp it so we don't overshoot
+            if self.current_drive_val < target_val:
+                self.current_drive_val = target_val
+
+        # Apply the smoothly changing value to both hardware motors
+        self.DC_motor1.value = self.current_drive_val
+        self.DC_motor2.value = self.current_drive_val
 
     def steer(self, direction):
         """
-        Steer the internal pendulum drive.
+        Steer the internal pendulum drive using a Square Wave (Stick-Slip).
         'direction' is a float from -1.0 (Full Left) to 1.0 (Full Right).
         """
-        max_turn_speed = 0.95  # Cap turning speed to 95% for stability
+        max_turn_speed = 0.30  
+        target_val = max(-1.0, min(1.0, direction)) * max_turn_speed
         
-        # Clamp input and apply the speed limit
-        turn_val = max(-1.0, min(1.0, direction)) * max_turn_speed
-        
-        # gpiozero handles the signed magnitude (Phase/PWM) automatically
-        self.Turn_motor.value = turn_val
+        # 1. If joystick is centered, stop immediately (no pulsing)
+        if abs(target_val) < 0.01:
+            self.Turn_motor.value = 0
+            return
 
+        # 2. Square Wave Logic
+        current_time = time.time()
+        # Modulo the current time by the period to find our position in the current wave
+        time_in_cycle = current_time % self.turn_pulse_period
+        
+        # 3. Check if we are in the "ON" phase of the duty cycle
+        if time_in_cycle < (self.turn_pulse_period * self.turn_duty_cycle):
+            self.Turn_motor.value = target_val  # Pulse ON
+        else:
+            self.Turn_motor.value = 0           # Pulse OFF
+  
+        
     def set_swing(self, degrees):
+        # --- DEBUG MODE: SWING SERVOS DISABLED & RESTED ---
+        # self.pca.channels[0].duty_cycle = 0 # Kill signal to swing_servo
+        # self.pca.channels[4].duty_cycle = 0 # Kill signal to swing_servo2
+        # return # Exit the function immediately
+        # --------------------------------------------------
         """Sets internal pendulum swing. Safe range 70 to 117"""
         self.current_swing = max(70, min(117, degrees))
         difference = self.current_swing - 90 + self.swing_offset
@@ -169,6 +213,36 @@ class BB8Movement:
         """
         self.head_rotate.throttle = max(-1.0, min(1.0, throttle))
 
+    def execute_step_response_test(self):
+        """Automated test to gather Transfer Function data"""
+        print("Starting Step Response Test in 3 seconds...")
+        time.sleep(3)
+        
+        # 1. Settle the robot at 0 degrees
+        self.target_pitch = 0.0
+        self.enable_system()
+        
+        start_time = time.time()
+        while time.time() - start_time < 3.0: # Let it balance for 3 seconds
+            self.update_balance()
+            # self.logger.log_step(..., ...) # Ensure your logger is running here
+            time.sleep(0.01) 
+            
+        # 2. THE STEP COMMAND
+        print("EXECUTING 5-DEGREE STEP!")
+        self.target_pitch = 10.0
+        
+        # 3. Record the dynamic response
+        step_time = time.time()
+        while time.time() - step_time < 3.0: # Record for 3 seconds
+            self.update_balance()
+            # self.logger.log_step(..., ...)
+            time.sleep(0.01)
+            
+        # 4. Safely shut down and dump the CSV
+        self.disable_system()
+        print("Test Complete. Check pid_telemetry.csv")
+    
     # --- UTILITY & SAFETY ---
     def stop_all(self):
         """Instantly stops all motors and centers servos"""
