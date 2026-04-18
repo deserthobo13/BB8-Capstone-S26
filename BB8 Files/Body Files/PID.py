@@ -22,11 +22,14 @@ class PIDController:
         self.output = 0.0
         
     def reset(self):
-        """Call this right before starting the balance loop to prevent massive dt spikes"""
+        """Call this right before starting the balance loop"""
         self.prev_error = 0.0
         self.integral = 0.0
         self.smoothed_derivative = 0.0
         self.last_time = time.time()
+        
+        # --- NEW: Flag to prevent startup kick ---
+        self.first_pass = True  
         
     def compute(self, setpoint, measured_value):
         current_time = time.time()
@@ -39,22 +42,24 @@ class PIDController:
         # 1. Calculate Error
         self.error = setpoint - measured_value
         
+        # --- NEW: Prevent Derivative Kick at Startup ---
+        # Pretend the previous error was exactly the same as the current error 
+        # on loop 1 so the derivative calculates a safe 0.0 rate of change.
+        if getattr(self, 'first_pass', True):
+            self.prev_error = self.error
+            self.first_pass = False
+
         # 2. Proportional
         self.p_term = self.kp * self.error
         
         # 3. Integral (with Anti-Windup)
-        # Clamped so it doesn't build up infinitely if the robot is stuck
         self.integral += self.error * dt
         self.integral = max(min(self.integral, 10.0), -10.0) 
         self.i_term = self.ki * self.integral
         
         # 4. Derivative (WITH LOW-PASS EMA FILTER)
         raw_derivative = (self.error - self.prev_error) / dt
-        
-        # Apply the smoothing math!
         self.smoothed_derivative = (self.alpha_d * raw_derivative) + ((1.0 - self.alpha_d) * self.smoothed_derivative)
-        
-        # Multiply Kd by the SMOOTHED derivative, not the raw one
         self.d_term = self.kd * self.smoothed_derivative
         
         # 5. Output
