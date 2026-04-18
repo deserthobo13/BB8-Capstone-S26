@@ -11,6 +11,8 @@ from Movement_Functions import BB8Movement
 bb8 = BB8Movement()
 bb8.enable_system() 
 
+bb8.head_rotate.throttle = -0.05
+
 UDP_IP = "0.0.0.0" 
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
