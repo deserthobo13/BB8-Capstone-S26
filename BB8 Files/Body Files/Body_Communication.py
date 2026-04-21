@@ -49,11 +49,11 @@ try:
             print(f"[{time.strftime('%H:%M:%S')}] Executing: '{current_command}'")
             
             if current_command == "FORWARD":
-                # bb8.drive(0.5)
+                bb8.drive(0.3)
                 bb8.spin_head(-0.05) # <--- ADD THIS: Stop the head before "driving"
                 print(">>> FORWARD SIGNAL RECEIVED: Attempting to drive forward <<<")
             elif current_command == "BACKWARD":
-                # bb8.drive(-0.5)
+                bb8.drive(-0.3)
                 bb8.spin_head(-0.05) # <--- ADD THIS: Stop the head before "driving"
                 print(">>> BACKWARD SIGNAL RECEIVED: Attempting to drive backward <<<")
             elif current_command == "STOP":

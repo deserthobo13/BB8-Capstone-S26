@@ -1,7 +1,7 @@
 import time
 
 class PIDController:
-    def __init__(self, kp, ki, kd, alpha_d=0.30):
+    def __init__(self, kp, ki, kd, alpha_d=0.05):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -34,6 +34,8 @@ class PIDController:
         current_time = time.time()
         dt = current_time - self.last_time
         
+        measured_value = (self.alpha_d * measured_value) + ((1.0 - self.alpha_d) * self.prev_measured_value)
+        
         if dt <= 0:
             return 0.0 
 
@@ -55,9 +57,9 @@ class PIDController:
         
         # 3. Derivative (ON MEASUREMENT + FILTERED)
         # Calculate raw change in physical robot movement, ignoring setpoint changes
-        raw_derivative = -(measured_value - self.prev_measured_value) / dt
+        raw_derivative = (measured_value - self.prev_measured_value) / dt
         
-        self.smoothed_derivative = (self.alpha_d * raw_derivative) + ((1.0 - self.alpha_d) * self.smoothed_derivative)
+        self.smoothed_derivative = raw_derivative #(self.alpha_d * raw_derivative) + ((1.0 - self.alpha_d) * self.smoothed_derivative)
         self.d_term = self.kd * self.smoothed_derivative
         
         # 4. Output

@@ -10,8 +10,6 @@ from gpiozero import PhaseEnableMotor as Motor
 from gpiozero import OutputDevice
 from PID import PIDController
 from IMU import IMUSensor
-from Telemetry import TelemetryLogger
-
 
 class BB8Movement:
     def __init__(self):
@@ -21,7 +19,7 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=0.12, ki=0.2, kd=0.2) 
+        self.balance_pid = PIDController(kp=-0.6, ki=0.1, kd=0.1) 
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685
@@ -66,16 +64,13 @@ class BB8Movement:
         # 0.15 is a great starting point for organic, droid-like head movement
         self.alpha_head = 0.15
         
-        # --- Telemetry Logger ---
-        self.logger = TelemetryLogger()
-        
         # --- SLEW RATE VARIABLES ---
         self.current_drive_val = 0.0
         self.drive_slew_rate = 0.005  # Adjust this: Lower = slower acceleration, Higher = punchier
         
         # --- TURN PULSE VARIABLES (SQUARE WAVE) ---
-        self.turn_pulse_period = 0.00001  # Length of one full cycle in seconds (100ms = 10Hz)
-        self.turn_duty_cycle = 1.0   # 90% ON, 10% OFF
+        self.turn_pulse_period = 0.1  # Length of one full cycle in seconds (100ms = 10Hz)
+        self.turn_duty_cycle = 0.5   # 90% ON, 10% OFF
         
     # --- POWER MANAGEMENT ---
     def enable_system(self):
@@ -89,62 +84,53 @@ class BB8Movement:
         self.relay2.off()
         self.stop_all()
         self.rest_all_servos()
-        
-        self.logger.save_to_csv() # Dump telemetry data to disk when the system is disabled
 
     # --- MAIN DRIVE & STEERING ---
     def drive(self, target_speed):
         """
-        Drive the main motors with an acceleration/deceleration ramp.
+        Drive the main motors instantly.
         'target_speed' is a float from -1.0 (Backward) to 1.0 (Forward).
         """
-        max_speed_factor = 1.0
+        # Clamp the value between -1.0 and 1.0 just in case
+        speed = max(-1.0, min(1.0, target_speed))
         
-        # Calculate the final target value the joystick is asking for
-        target_val = max(-1.0, min(1.0, target_speed)) * max_speed_factor
+        # Apply the value directly to the hardware pins
+        self.DC_motor1.value = speed
+        self.DC_motor2.value = speed
         
-        # --- SLEW RATE LIMITER (THE RAMP) ---
-        # If target is greater than current, ramp up
-        if self.current_drive_val < target_val:
-            self.current_drive_val += self.drive_slew_rate
-            # Clamp it so we don't overshoot the target
-            if self.current_drive_val > target_val:
-                self.current_drive_val = target_val
-                
-        # If target is less than current, ramp down
-        elif self.current_drive_val > target_val:
-            self.current_drive_val -= self.drive_slew_rate
-            # Clamp it so we don't overshoot
-            if self.current_drive_val < target_val:
-                self.current_drive_val = target_val
-
-        # Apply the smoothly changing value to both hardware motors
-        self.DC_motor1.value = self.current_drive_val
-        self.DC_motor2.value = self.current_drive_val
+        # Keep track of the value for other internal functions
+        self.current_drive_val = speed
 
     def steer(self, direction):
         """
         Steer the internal pendulum drive using a Square Wave (Stick-Slip).
         'direction' is a float from -1.0 (Full Left) to 1.0 (Full Right).
         """
-        max_turn_speed = 0.30  
-        target_val = max(-1.0, min(1.0, direction)) * max_turn_speed
+        max_turn_speed = 1.0
         
         # 1. If joystick is centered, stop immediately (no pulsing)
-        if abs(target_val) < 0.01:
-            self.Turn_motor.value = 0
+        if abs(direction) < 0.01:
+            self.Turn_motor.stop() # Use the proper gpiozero stop method
             return
 
         # 2. Square Wave Logic
         current_time = time.time()
-        # Modulo the current time by the period to find our position in the current wave
         time_in_cycle = current_time % self.turn_pulse_period
         
         # 3. Check if we are in the "ON" phase of the duty cycle
         if time_in_cycle < (self.turn_pulse_period * self.turn_duty_cycle):
-            self.Turn_motor.value = target_val  # Pulse ON
+            # We are ON! 
+            # Calculate absolute speed (0.0 to 1.0)
+            speed = abs(direction) * max_turn_speed
+            
+            # Set direction based on the sign
+            if direction > 0:
+                self.Turn_motor.forward(speed)
+            else:
+                self.Turn_motor.backward(speed)
         else:
-            self.Turn_motor.value = 0           # Pulse OFF
+            # We are OFF!
+            self.Turn_motor.stop()
   
         
     def set_swing(self, degrees):
@@ -243,7 +229,6 @@ class BB8Movement:
             
         # 4. Safely shut down and dump the CSV
         self.disable_system()
-        print("Test Complete. Check pid_telemetry.csv")
     
     # --- UTILITY & SAFETY ---
     def stop_all(self):
