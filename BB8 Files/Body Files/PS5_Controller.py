@@ -9,12 +9,8 @@ import pygame
 # Import the unified hardware manager
 from Movement_Functions import BB8Movement
 
-# Import the dead reckoning module
-# from Dead_Reckoning import DeadReckoning
-
 # Initialize hardware via class
 bb8 = BB8Movement()
-# dr = DeadReckoning()
 
 # Initialize pygame for the controller
 pygame.init()
@@ -45,56 +41,72 @@ elif test_choice == "5":
     
 elif test_choice == "4":
     print("\n[INITIATING AUTOMATED STEP RESPONSE TEST]")
-    # 1. Call the self-contained function you added to Movement_Functions.py
     bb8.execute_step_response_test()
-    
-    # 2. Raise a KeyboardInterrupt to intentionally break the script.
-    # This acts as a safe "Go to Finally" command, ensuring your script
-    # cleanly shuts down the motors, kills the relays, and exits Pygame.
     raise KeyboardInterrupt
 
 # 7. MAIN EXECUTION LOOP
 print("\n--- SYSTEM ACTIVE ---")
 print("PS BUTTON: Emergency Stop | X BUTTON: Reset All")
 print("L1/R1: Head Spin | D-PAD L/R: Steering | L-STICK Y: Drive")
+print("R-STICK: Head Pitch/Roll | L2/R2: Manual Swing (L/R)")
 
 # --- DELTA TIME SETUP ---
 TARGET_LOOP_TIME = 0.02 # 50Hz
-
-# --- INITIALIZE PREVIOUS TIME ---
 last_time = time.time()
 
 try:
     while True:
         loop_start = time.time()
-        
-        # --- CALCULATE DT (Time since last loop) ---
         dt = loop_start - last_time
         last_time = loop_start
         
         if PS5_control_mode:
-            pygame.event.pump()
+            # Safely clear the Pygame event queue
+            for event in pygame.event.get():
+                pass 
+            
             if auto_balance:
-                # --- A. STABILITY CONTROL (AUTOMATED) ---
+                # --- OPTION 5: STABILITY CONTROL (AUTOMATED) ---
                 bb8.update_balance()
             
-                # --- B. STABILITY CONTROL (AUTOMATED) ---
-                z_lin_accel = bb8.imu.accel_z
-                # velocity, distance = dr.update(z_lin_accel, dt)
             else: 
-                # MANUAL SWING OVERRIDE (Right Stick Y-Axis)
-                # Note: Pygame usually maps Right Stick Y to axis 3 or 4 depending on the OS.
-                # If axis 3 acts weird (like a trigger), change it to axis 4.
-                ry_axis = -joystick.get_axis(3) 
+                # --- OPTION 6: FULL MANUAL CONTROL ---
                 
-                # Map joystick (-1.0 to 1.0) to safe servo degrees (70 to 110)
-                # 90 is perfectly centered. Max tilt is +/- 20 degrees.
-                target_swing = 90 + (ry_axis * 20) 
+                # 1. MANUAL PENDULUM SWING (L2 and R2 Triggers)
+                # DualSense Linux Mapping: Axis 4 (L2), Axis 5 (R2)
+                l2_trigger = joystick.get_axis(4) 
+                r2_trigger = joystick.get_axis(5)
+                
+                # Convert from (-1 to 1) resting scale to a (0 to 1) active scale
+                l2_amount = (l2_trigger + 1.0) / 2.0
+                r2_amount = (r2_trigger + 1.0) / 2.0
+                
+                # Calculate target swing: 
+                # Base is 90. 
+                # R2 adds up to +20 (swings right toward 110). 
+                # L2 subtracts up to -20 (swings left toward 70).
+                # If both are pulled equally, they cancel out.
+                target_swing = 90 + (r2_amount * 20.0) - (l2_amount * 20.0)
                 bb8.set_swing(target_swing)
                 
-                # Note: We skip bb8.update_balance(), so the head servos won't auto-level
-                # based on IMU roll/pitch in this mode, which is expected for manual testing!
+                # 2. MANUAL HEAD MOVEMENT (Right Stick)
+                # DualSense Linux Mapping: Axis 2 (RX - Roll), Axis 3 (RY - Pitch)
+                rx_axis = joystick.get_axis(2) 
+                ry_axis = -joystick.get_axis(3) # Inverted so pushing up tilts head forward
                 
+                # Map joystick (-1.0 to 1.0) to raw target degrees
+                # Using a +/- 25 degree range for head movement
+                target_head_fb = 90 + (ry_axis * 25)
+                target_head_sts = 90 + (rx_axis * 25)
+                
+                # Apply the EMA filter (Shock Absorber) to the manual inputs
+                bb8.smoothed_head_fb = (bb8.alpha_head * target_head_fb) + ((1 - bb8.alpha_head) * bb8.smoothed_head_fb)
+                bb8.smoothed_head_sts = (bb8.alpha_head * target_head_sts) + ((1 - bb8.alpha_head) * bb8.smoothed_head_sts)
+                
+                # Send the smoothed data to the servos
+                bb8.set_head_fb(round(bb8.smoothed_head_fb, 1))
+                bb8.set_head_sts(round(bb8.smoothed_head_sts, 1))
+
             # --- C. SYSTEM BUTTONS ---
             if joystick.get_button(10): # PS Button (Kill)
                 raise KeyboardInterrupt
@@ -106,26 +118,26 @@ try:
             # --- D. LEFT STICK: DRIVE (Y-Axis Only) ---
             ly_axis = -joystick.get_axis(1) # Drive Y
             if abs(ly_axis) > 0.1:
-                bb8.drive(ly_axis) # BB8Movement handles the 0.30 multiplier now
+                bb8.drive(ly_axis)
             else:
                 bb8.drive(0)
 
             # --- E. D-PAD: STEERING (TURN MOTOR) ---
             hat = joystick.get_hat(0)
             if hat[0] == -1:
-                bb8.steer(1) # Turn Left 
+                bb8.steer(1.0) # Turn Left (Using float value now)
             elif hat[0] == 1:
-                bb8.steer(-1)  # Turn Right
+                bb8.steer(-1.0)  # Turn Right
             else:
-                bb8.steer(0)  # True Zero stop
+                bb8.steer(0.0)
 
             # --- F. BUMPERS: HEAD ROTATION (SPIN) ---
-            if joystick.get_button(4):
+            if joystick.get_button(4): # L1
                 bb8.spin_head(-1.0) # Spin Left
-            elif joystick.get_button(5):
+            elif joystick.get_button(5): # R1
                 bb8.spin_head(1.0)  # Spin Right
             else:
-                bb8.spin_head(-0.05) # Stop Spin
+                bb8.spin_head(-0.05) # Stop Spin (Slight offset to counter drift if needed)
 
             # --- G. DYNAMIC LOOP TIMING ---
             elapsed = time.time() - loop_start
@@ -134,8 +146,14 @@ try:
 
         # --- ONE TIME TESTS ---
         elif test_choice == "1":
+            print("Testing Drive Motor...")
             bb8.drive(0.5); time.sleep(1); bb8.drive(0)
+            time.sleep(0.5)
+            print("Testing Steer Motor...")
+            bb8.steer(1.0); time.sleep(1); bb8.steer(0) 
+            print("Tests Complete.")
             sys.exit()
+            
         elif test_choice == "2":
             bb8.set_swing(75); time.sleep(1); bb8.set_swing(105); time.sleep(1); bb8.set_swing(90)
             sys.exit()
