@@ -7,7 +7,7 @@ from picamera2 import Picamera2
 from pupil_apriltags import Detector
 
 # --- 1. CONFIGURATION ---
-MOTOR_PI_IP = "bb8pi.local"  # Body Pi IP
+MOTOR_PI_IP = "10.227.99.163"  # <--- UPDATED: Hardcoded Body Pi IP on eduroam
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -61,7 +61,6 @@ TARGET_DIST = 70.0 # Target distance in inches
 print("--- BB-8 HYBRID CONTROL ACTIVE ---")
 print("Controls: W/A/S/D/X for manual. Type 'search' for Auto-Tracking. Type 'manual' to cancel.")
 
-# --- ADD THIS BEFORE THE WHILE LOOP ---
 last_seen_time = time.time()
 LOST_GRACE_PERIOD = 1.0  # 1 second buffer
 
