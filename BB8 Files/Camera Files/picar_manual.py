@@ -48,8 +48,14 @@ config = picam2.create_preview_configuration(main={"size": (640, 480)})
 picam2.configure(config)
 picam2.start()
 
+# 5. SETUP VIDEO WRITER
+# Using XVID codec to output an .avi file. Set to 20 FPS to account for processing time.
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+out = cv2.VideoWriter('bb8_demo_run.avi', fourcc, 20.0, (640, 480))
+
 print("--- BB-8 ONLINE: PRO DRIVE & VISION ---")
 print("Drive: W/S/A/D | Exit: ESC or Q")
+print("Recording video to 'bb8_demo_run.avi'...")
 
 try:
     while True:
@@ -89,17 +95,23 @@ try:
         else:
             px.forward(0)
 
-        # --- UI DISPLAY ---
+        # --- UI DISPLAY & RECORDING ---
         cv2.putText(frame_bgr, f"STEER: {current_angle} | TAGS: {len(results)}", 
                     (10, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        
+        # Write the fully processed frame to the video file
+        out.write(frame_bgr)
+        
         cv2.imshow("BB-8 PRO HUB", frame_bgr)
 
         if cv2.waitKey(1) & 0xFF == ord('q') or not listener.running:
             break
 
 finally:
+    # --- CLEANUP ---
     px.forward(0)
     px.set_dir_servo_angle(0)
     picam2.stop()
+    out.release() # CRITICAL: Releases the video file so it saves properly
     cv2.destroyAllWindows()
     listener.stop()
