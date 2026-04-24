@@ -10,11 +10,11 @@ px = Picarx()
 # --- 1. SETTINGS ---
 CRAWL_SPEED = 15      
 SEARCH_SPEED = 25     
-TARGET_DISTANCE = 70.0
+TARGET_DISTANCE = 60.0
 
 # Distance Zones
-START_MOVE_MIN = TARGET_DISTANCE - 5.0 
-START_MOVE_MAX = TARGET_DISTANCE + 5.0 
+START_MOVE_MIN = TARGET_DISTANCE - 8.0 
+START_MOVE_MAX = TARGET_DISTANCE + 8.0 
 STOP_FORWARD = TARGET_DISTANCE   
 STOP_BACKWARD = TARGET_DISTANCE + 3.0  
 
@@ -61,7 +61,7 @@ try:
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         results = at_detector.detect(gray, estimate_tag_pose=True, camera_params=[600, 600, 320, 240], tag_size=165.1)
-        my_tag = next((t for t in results if t.tag_id == 0), None)
+        my_tag = next((t for t in results if t.tag_id == 1), None)
         
         status = "SEARCHING AREA..."
 

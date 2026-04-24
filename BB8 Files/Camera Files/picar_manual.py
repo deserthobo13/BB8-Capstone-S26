@@ -74,9 +74,9 @@ try:
             dist_inch = z / 25.4
             cx, cy = int(tag.center[0]), int(tag.center[1])
             
-            cv2.circle(frame_bgr, (cx, cy), 8, (0, 255, 0), -1)
+            cv2.circle(frame_bgr, (cx, cy), 8, (0, 165, 255), -1)
             cv2.putText(frame_bgr, f"ID:{tag.tag_id} DIST:{dist_inch:.1f}in", 
-                        (cx - 60, cy - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                        (cx - 60, cy - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
 
         # --- MOTOR LOGIC STEP ---
         # Smooth Steering (increments by 2 degrees per frame)
