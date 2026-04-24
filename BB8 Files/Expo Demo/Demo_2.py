@@ -6,7 +6,8 @@ from picamera2 import Picamera2
 from pupil_apriltags import Detector
 
 # --- 1. CONFIGURATION ---
-MOTOR_PI_IP = "bb8pi.local"  # Update this if your Motor Pi IP changes
+# Updated to hard-coded Body Pi IP
+MOTOR_PI_IP = "10.227.99.163"  
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
