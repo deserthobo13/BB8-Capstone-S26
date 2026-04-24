@@ -19,7 +19,8 @@ class BB8Movement:
         self.imu = IMUSensor()
         
         # Initialize PID with the starter values from your dummy test
-        self.balance_pid = PIDController(kp=-0.6, ki=0.1, kd=0.1) 
+        self.balance_pid = PIDController(kp=0.0, ki=0.0, kd=0.0) 
+        #kp=-0.6, ki=0.1, kd=0.1, kp=0.12, ki=0.2, kd=0.2
         self.target_pitch = 0.0 # 0 degrees = perfectly upright
         
         # 1. INITIALIZE I2C & PCA9685
@@ -159,7 +160,7 @@ class BB8Movement:
         pid_correction = self.balance_pid.compute(self.target_pitch, current_pitch)
 
         # Log the data to RAM
-        self.logger.log_step(current_pitch, self.target_pitch, self.balance_pid)
+        # self.logger.log_step(current_pitch, self.target_pitch, self.balance_pid)
 
         # 3. Apply the hardware mapping (90 - correction)
         target_servo_degrees = 90 - pid_correction

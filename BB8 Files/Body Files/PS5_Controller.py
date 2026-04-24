@@ -47,8 +47,8 @@ elif test_choice == "4":
 # 7. MAIN EXECUTION LOOP
 print("\n--- SYSTEM ACTIVE ---")
 print("PS BUTTON: Emergency Stop | X BUTTON: Reset All")
-print("L1/R1: Head Spin | D-PAD L/R: Steering | L-STICK Y: Drive")
-print("R-STICK: Head Pitch/Roll | L2/R2: Manual Swing (L/R)")
+print("L-STICK Y: Drive (Fixed 40%) | D-PAD L/R: Pirouette Steer")
+print("L1/R1: Head Spin | R-STICK: Head Pitch & Roll | L2/R2: Pendulum Swing")
 
 # --- DELTA TIME SETUP ---
 TARGET_LOOP_TIME = 0.02 # 50Hz
@@ -65,49 +65,7 @@ try:
             for event in pygame.event.get():
                 pass 
             
-            if auto_balance:
-                # --- OPTION 5: STABILITY CONTROL (AUTOMATED) ---
-                bb8.update_balance()
-            
-            else: 
-                # --- OPTION 6: FULL MANUAL CONTROL ---
-                
-                # 1. MANUAL PENDULUM SWING (L2 and R2 Triggers)
-                # DualSense Linux Mapping: Axis 4 (L2), Axis 5 (R2)
-                l2_trigger = joystick.get_axis(4) 
-                r2_trigger = joystick.get_axis(5)
-                
-                # Convert from (-1 to 1) resting scale to a (0 to 1) active scale
-                l2_amount = (l2_trigger + 1.0) / 2.0
-                r2_amount = (r2_trigger + 1.0) / 2.0
-                
-                # Calculate target swing: 
-                # Base is 90. 
-                # R2 adds up to +20 (swings right toward 110). 
-                # L2 subtracts up to -20 (swings left toward 70).
-                # If both are pulled equally, they cancel out.
-                target_swing = 90 + (r2_amount * 20.0) - (l2_amount * 20.0)
-                bb8.set_swing(target_swing)
-                
-                # 2. MANUAL HEAD MOVEMENT (Right Stick)
-                # DualSense Linux Mapping: Axis 2 (RX - Roll), Axis 3 (RY - Pitch)
-                rx_axis = joystick.get_axis(2) 
-                ry_axis = -joystick.get_axis(3) # Inverted so pushing up tilts head forward
-                
-                # Map joystick (-1.0 to 1.0) to raw target degrees
-                # Using a +/- 25 degree range for head movement
-                target_head_fb = 90 + (ry_axis * 25)
-                target_head_sts = 90 + (rx_axis * 25)
-                
-                # Apply the EMA filter (Shock Absorber) to the manual inputs
-                bb8.smoothed_head_fb = (bb8.alpha_head * target_head_fb) + ((1 - bb8.alpha_head) * bb8.smoothed_head_fb)
-                bb8.smoothed_head_sts = (bb8.alpha_head * target_head_sts) + ((1 - bb8.alpha_head) * bb8.smoothed_head_sts)
-                
-                # Send the smoothed data to the servos
-                bb8.set_head_fb(round(bb8.smoothed_head_fb, 1))
-                bb8.set_head_sts(round(bb8.smoothed_head_sts, 1))
-
-            # --- C. SYSTEM BUTTONS ---
+            # --- SYSTEM BUTTONS (Always active) ---
             if joystick.get_button(10): # PS Button (Kill)
                 raise KeyboardInterrupt
             
@@ -115,31 +73,82 @@ try:
                 bb8.stop_all()
                 print("Motors Reset to Zero...")
 
-            # --- D. LEFT STICK: DRIVE (Y-Axis Only) ---
-            ly_axis = -joystick.get_axis(1) # Drive Y
-            if abs(ly_axis) > 0.1:
-                bb8.drive(ly_axis)
-            else:
-                bb8.drive(0)
+            # ==========================================
+            # CONDITIONAL CONTROLS (Pendulum & Head Tilt)
+            # ==========================================
+            if auto_balance:
+                # --- OPTION 5: STABILITY CONTROL ---
+                # Completely relies on IMU and update_balance(), leaves joystick alone
+                bb8.update_balance()
+            
+            else: 
+                # --- OPTION 6: MANUAL STABILITY CONTROL ---
+                
+                # 1. MANUAL PENDULUM SWING (L2 & R2 Triggers)
+                # Left Trigger = Axis 2 | Right Trigger = Axis 5
+                l2_raw = joystick.get_axis(2) 
+                r2_raw = joystick.get_axis(5)
+                
+                # Zero-state bug fix for Pygame triggers
+                if l2_raw == 0.0: l2_raw = -1.0
+                if r2_raw == 0.0: r2_raw = -1.0
+                
+                l2_amount = (l2_raw + 1.0) / 2.0
+                r2_amount = (r2_raw + 1.0) / 2.0
+                
+                # Math Swapped: L2 is now (+), R2 is now (-)
+                target_pendulum = 90 + (l2_amount * 20.0) - (r2_amount * 20.0)
+                bb8.set_swing(target_pendulum) 
+                
+                # 2. MANUAL HEAD MOVEMENT (Right Stick)
+                # Right Stick X = Axis 3 (STS) | Right Stick Y = Axis 4 (FB)
+                # BOTH AXES NEGATED AS REQUESTED
+                stick_sts = -joystick.get_axis(3) 
+                stick_fb = joystick.get_axis(4) 
+                
+                target_from_stick_sts = 90 + (stick_sts * 25)
+                target_from_stick_fb = 90 + (stick_fb * 25)
+                
+                # Wired as requested: Stick STS -> head_fb | Stick FB -> head_sts
+                bb8.smoothed_head_fb = (bb8.alpha_head * target_from_stick_sts) + ((1 - bb8.alpha_head) * bb8.smoothed_head_fb)
+                bb8.smoothed_head_sts = (bb8.alpha_head * target_from_stick_fb) + ((1 - bb8.alpha_head) * bb8.smoothed_head_sts)
+                
+                bb8.set_head_fb(round(bb8.smoothed_head_fb, 1))
+                bb8.set_head_sts(round(bb8.smoothed_head_sts, 1))
 
-            # --- E. D-PAD: STEERING (TURN MOTOR) ---
+            # ==========================================
+            # UNIVERSAL CONTROLS (Active in Mode 5 and 6)
+            # ==========================================
+            
+            # 3. MANUAL DRIVE (Left Stick Y-Axis)
+            # Left Stick Y = Axis 1
+            ly_axis = -joystick.get_axis(1) 
+            
+            if ly_axis > 0.15: 
+                bb8.drive(0.3)  # Hardcoded 40% forward
+            elif ly_axis < -0.15:
+                bb8.drive(-0.3) # Hardcoded 40% backward
+            else:
+                bb8.drive(0.0)  # Hardcoded 0% stop
+
+            # 4. PIROUETTE STEERING (Turn Motor on D-Pad)
             hat = joystick.get_hat(0)
             if hat[0] == -1:
-                bb8.steer(1.0) # Turn Left (Using float value now)
+                bb8.steer(-1.0) # FLIPPED! 
             elif hat[0] == 1:
-                bb8.steer(-1.0)  # Turn Right
+                bb8.steer(1.0)  # FLIPPED! 
             else:
                 bb8.steer(0.0)
 
-            # --- F. BUMPERS: HEAD ROTATION (SPIN) ---
+            # 5. HEAD ROTATION (SPIN on Bumpers)
             if joystick.get_button(4): # L1
                 bb8.spin_head(-1.0) # Spin Left
             elif joystick.get_button(5): # R1
                 bb8.spin_head(1.0)  # Spin Right
             else:
-                bb8.spin_head(-0.05) # Stop Spin (Slight offset to counter drift if needed)
+                bb8.spin_head(-0.05) # Stop Spin
 
-            # --- G. DYNAMIC LOOP TIMING ---
+            # --- DYNAMIC LOOP TIMING ---
             elapsed = time.time() - loop_start
             if elapsed < TARGET_LOOP_TIME:
                 time.sleep(TARGET_LOOP_TIME - elapsed)
@@ -158,12 +167,17 @@ try:
             bb8.set_swing(75); time.sleep(1); bb8.set_swing(105); time.sleep(1); bb8.set_swing(90)
             sys.exit()
 
-except (KeyboardInterrupt, ValueError):
-    print("\nShutting Down Safely...")
+except KeyboardInterrupt:
+    print("\nShutting Down Safely (User Initiated)...")
+except ValueError as e:
+    print(f"\n[SENSOR ERROR] ValueError caught: {e}")
+    print("This is likely bad I2C data from the IMU. Check wiring or retry.")
+except Exception as e:
+    print(f"\n[CRITICAL ERROR] {e}")
 finally:
     bb8.stop_all()
     bb8.rest_all_servos()
-    bb8.disable_system() # Ensure relays are off
+    bb8.disable_system() 
     print("Relays Powered OFF")
     
     pygame.quit()
