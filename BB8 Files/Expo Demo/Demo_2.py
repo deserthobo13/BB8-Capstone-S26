@@ -31,7 +31,8 @@ def terminal_input_thread():
         cmd = input("").strip().lower()
         if cmd == 'demo':
             robot_mode = "REACTIVE"
-            print("\n>>> REACTIVE MODE ACTIVATED: Tag 0=Forward, Tag 1=Spin Head, Tag 2=Backward <<<")
+            # UPDATED: Added Tag 3 to the print menu
+            print("\n>>> REACTIVE MODE ACTIVATED: Tag 0=Forward, Tag 1=Spin Head, Tag 2=Backward, Tag 3=Turn Right <<<")
         elif cmd in ['manual', 'stop', 'x']:
             robot_mode = "MANUAL"
             current_command = "STOP"
@@ -75,6 +76,8 @@ try:
                     current_command = "SPIN_HEAD_RIGHT" 
                 elif tag_id == 2:
                     current_command = "BACKWARD"
+                elif tag_id == 3:  # <--- ADDED LOGIC FOR TAG 3
+                    current_command = "TURN_RIGHT"
                 else:
                     current_command = "STOP"
             else:
