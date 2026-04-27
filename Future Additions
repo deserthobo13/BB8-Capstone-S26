@@ -1,11 +1,19 @@
 There are several changes that will be needed in the future for this BB8 project.
 
-1. The first thing that needs to be done is to get a teensy or some microcontroller that is very fast. The PID and balancing calculations should be done here and sent to the pendulum. There is a high amount of latency in the Raspberry Pi due to all the other calculations happening, which means that by the time it has read the IMU data, put it through the balancing algorithm and output it to the pendulum, the pendulum has already started moving in the opposite direction, so it is out of phase with the balancing. To mitigate this, offloading these calculations and performing them in C should work great.
+1. The first thing that needs to be done is a new shell needs to be built. This should not be flimsy and should fit together seamlessly. The holes which connect the robot into the shell should be high precision. 
 
-2. A new shell needs to be built. This should not be flimsy and should fit together seamlessly. The holes which connect the robot into the shell should be high precision. 
+2. Get a teensy or some microcontroller that is very fast. The PID and balancing calculations should be done here and sent to the pendulum. There is a high amount of latency in the Raspberry Pi due to all the other calculations happening, which means that by the time it has read the IMU data, put it through the balancing algorithm and output it to the pendulum, the pendulum has already started moving in the opposite direction, so it is out of phase with the balancing. To mitigate this, offloading these calculations and performing them in C should work great.
 
 3. An entirely new turning mechanism needs to be devised. The current design uses the pirouette motor to create an impulse of force, and the inertia rotates the BB8 in the opposite direction. Unfortunately, this doesn't work  as there is friction which pushes the BB8 back to its original position after the pirouette turns it. This entire system should be redesigned as it doesn't turn the BB8 at all. 
 
 4. The head should be lighter. It could be created using a light material, and the cowboy hat should be made of foam or something of the like.
 
 5. Some new, better servos and possible a new IMU would go a long way. Currently, the IMU only refreshes at 50Hz. If we want more precise data, having a faster IMU could make a big difference. The servos are older and have some jitter in them. We are not sure what is causing it, but newer, better servos would be a major upgrade.
+
+6. The current wires are ok for prototyping, but switch to high-quality, hand-cut wires leading to and from every device
+
+7. When integrating AI into the head, a new camera would be a good addition for long-term precision. The current camera integrates great with the Pi, but it is low-quality. A high quality, hi-res camera would greatly enhance all the head capabilities especially when integrating AI
+
+8. For AI, we got a Pi hat to offload the computational overhead of AI. However, we heard from another group that doing so added a massive latency (~5 sec) to the camera which would be detrimental if true. Perhaps test how it works and then look into getting an Nvidia Jetson for the head
+
+
